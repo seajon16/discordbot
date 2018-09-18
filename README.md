@@ -33,3 +33,8 @@
 * Sounds placed in the `sounds` directory must be contained in additional subfolders, used as categories
   * For example, if one wanted to insert the sound `bell.mp3` in the `noises` category, one would place it in `sounds/noises/bell.mp3`
   * If the sound file is placed directly into the `sounds` folder, it will be ignored
+
+# Additional Resources
+* [discord.py documentation](https://discordpy.readthedocs.io/en/latest/api.html)
+* [playlist.py example](https://github.com/Rapptz/discord.py/blob/async/examples/playlist.py), which this bot's streaming capabilities is based off
+* [Helpful video](https://youtu.be/wuVRK7r6iaI) explaining how to add commands

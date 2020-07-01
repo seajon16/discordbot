@@ -4,6 +4,7 @@ from random import choice
 
 from settings import get_settings
 from exceptions import BananaCrime
+from voicecontroller import VoiceController
 
 
 bot = commands.Bot(
@@ -102,4 +103,5 @@ async def on_ready():
 
 token = get_settings()['token']
 bot.load_extension('utilities')
+bot.add_cog(VoiceController(bot))
 bot.run(token)

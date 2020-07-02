@@ -5,7 +5,7 @@
   * `ping`/`howyoudoin`: Healthcheck
   * `roll`: Handles a dice roll in the form (A)dB(+C-D...)
   * `choose`: Picks a random option from a given list of choices
-  * `fact`: Gives a random fact using [uselessfacts.jsph.pl](uselessfacts.jsph.pl)
+  * `fact`: Gives a random fact using [uselessfacts.jsph.pl](https://uselessfacts.jsph.pl)
   * `shutdown`: Gracefully shuts down the bot; must be my owner
 
 * Can stream audio from the internet using `youtube-dl`

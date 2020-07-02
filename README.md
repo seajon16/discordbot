@@ -38,4 +38,3 @@
 # Additional Resources
 * [discord.py documentation](https://discordpy.readthedocs.io/en/latest/api.html)
 * [`basic_voice.py` example from discord.py's repo](https://github.com/Rapptz/discord.py/blob/master/examples/basic_voice.py), which partially inspired this bot's [`voicecontroller.py`](./voicecontroller.py)
-* [Helpful video](https://youtu.be/wuVRK7r6iaI) explaining how to add commands

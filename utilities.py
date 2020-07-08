@@ -1,8 +1,17 @@
+"""Holds a bunch of basic commands."""
+
+
 from discord.ext import commands
 import random
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientConnectorError, ClientResponseError
+import logging
 
 from exceptions import BananaCrime
+
+
+GITHUB_URL = 'https://github.com/seajon16/discordbot'
+FACTS_URL = 'https://uselessfacts.jsph.pl/random.json?language=en'
+LOGGER = logging.getLogger(__name__)
 
 
 @commands.command(aliases=('ping',))
@@ -13,7 +22,7 @@ async def howyoudoin(ctx):
 
 @commands.command()
 async def roll(ctx, desire=None):
-    """Handles a dice roll in the form (A)dB(+C-D...)."""
+    """Handle a dice roll in the form (A)dB(+C-D...)."""
     if not desire:
         raise BananaCrime(
             "Standard form using integers, d, +, and - "
@@ -53,7 +62,7 @@ async def roll(ctx, desire=None):
 
 @commands.command()
 async def choose(ctx, *choices):
-    """Picks a random option from a given list of choices."""
+    """Pick a random option from a given list of choices."""
     if not len(choices):
         raise BananaCrime('I need a list of choices')
     elif len(choices) == 1:
@@ -68,21 +77,25 @@ async def choose(ctx, *choices):
 
 @commands.command()
 async def fact(ctx):
-    """Gives a random fact."""
-    url = 'https://uselessfacts.jsph.pl/random.json?language=en'
-    async with ClientSession() as session:
-        resp = await session.request(method="GET", url=url)
-    resp.raise_for_status()
-    body = await resp.json()
-    await ctx.send(body['text'])
+    """Give a random fact."""
+    try:
+        async with ClientSession() as session:
+            resp = await session.get(FACTS_URL)
+        resp.raise_for_status()
+        body = await resp.json()
+        await ctx.send(body['text'])
+    except (ClientConnectorError, ClientResponseError):
+        LOGGER.exception('Error pulling from useless facts API:')
+        await ctx.send(
+            "I couldn't connect to the all-powerful useless facts API; "
+            "try again later."
+        )
 
 
 @commands.command()
-@commands.is_owner()
-async def shutdown(ctx):
-    """Gracefully shuts down the bot; must be my owner."""
-    await ctx.send('okey dokey')
-    await ctx.bot.logout()
+async def code(ctx):
+    """Give a GitHub link to my code."""
+    await ctx.send(GITHUB_URL)
 
 
 def setup(bot):
@@ -91,7 +104,7 @@ def setup(bot):
         roll,
         choose,
         fact,
-        shutdown
+        code
     ]
     for callback in callbacks:
         bot.add_command(callback)

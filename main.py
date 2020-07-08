@@ -1,11 +1,19 @@
 from discord import Game
 from discord.ext import commands
 from random import choice
+import logging
+import logging.config
+import asyncio
+from websockets.exceptions import ConnectionClosedOK
 
 from settings import get_settings
 from exceptions import BananaCrime
 from voicecontroller import VoiceController
 
+
+settings_dict = get_settings()
+logging.config.dictConfig(settings_dict["logging"])
+LOGGER = logging.getLogger(__name__)
 
 bot = commands.Bot(
     command_prefix='q.',
@@ -36,13 +44,9 @@ async def check_err_count(ctx):
         err_count[author] += 1
         newval = err_count[author]
         if newval == 3:
-            await ctx.send(
-                "That's the third command in a row you messed up."
-            )
+            await ctx.send("That's the third command in a row you messed up.")
         elif newval == 6:
-            await ctx.send(
-                "You really aren't good at this."
-            )
+            await ctx.send("You really aren't good at this.")
         elif newval >= 9 and not newval % 3:
             await ctx.send(
                 f'Are you doing this on purpose, {author.mention}? '
@@ -68,18 +72,17 @@ async def on_command_error(ctx, ex):
 
     elif ex_type == commands.errors.CommandInvokeError \
         and type(ex.original) == BananaCrime:
-        await ctx.send(
-            f'{ex.original.crime}, you {choice(banana_names)}.'
-        )
+        await ctx.send(f'{ex.original.crime}, you {choice(banana_names)}.')
 
     elif ex_type == commands.errors.NotOwner:
-        await ctx.send("you aren't jon, you banana")
+        await ctx.send("You aren't my owner, you banana.")
 
     elif ex_type == commands.errors.BadArgument:
         await ctx.send(ex.args[0])
 
     else:
         await ctx.send('what are you doing')
+        LOGGER.error('Unexpected exception thrown while handling a command:')
         raise ex
 
 
@@ -96,12 +99,86 @@ async def on_command_completion(ctx):
 
 
 @bot.event
+async def on_command(ctx):
+    LOGGER.info(
+        f'{ctx.message.author} in {ctx.guild}#{ctx.guild.id} '
+        f'ran {ctx.message.content}'
+    )
+
+
+@bot.event
 async def on_ready():
-    print('Logged in as', bot.user)
+    LOGGER.info(f'Logged in as {bot.user}')
     await bot.change_presence(activity=Game('q.help'))
 
 
-token = get_settings()['token']
-bot.load_extension('utilities')
-bot.add_cog(VoiceController(bot))
-bot.run(token)
+@bot.command()
+@commands.is_owner()
+async def shutdown(ctx):
+    """Gracefully shut down the bot; must be my owner."""
+    await ctx.send('okey dokey')
+    await bot.logout()
+
+
+async def stop_and_cleanup():
+    """Stop the bot and perform loop cleanup."""
+    LOGGER.info('Stopping bot...')
+    await bot.logout()
+
+    tasks = [
+        task for task in asyncio.all_tasks()
+        if task is not asyncio.current_task()
+    ]
+    LOGGER.debug('Cancelling all tasks...')
+    for task in tasks:
+        LOGGER.debug(f'Cancelling {task}')
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    LOGGER.debug('All tasks cancelled')
+
+    for task in tasks:
+        if task.cancelled():
+            continue
+        task_ex = task.exception()
+        # Ignore normal socket closures and uncaught cancels
+        if task_ex is not None \
+            and not isinstance(task_ex, ConnectionClosedOK) \
+            and not isinstance(task_ex, asyncio.CancelledError):
+            LOGGER.error('Unexpected exception found during shutdown:')
+            bot.loop.call_exception_handler({
+                'message': 'Unexpected exception found during shutdown',
+                'exception': task_ex,
+                'task': task
+            })
+
+    LOGGER.debug('Shutting down async generators...')
+    await bot.loop.shutdown_asyncgens()
+    LOGGER.debug('Async generators shut down')
+
+    bot.loop.stop()
+
+
+try:
+    LOGGER.info('Starting bot...')
+    bot.loop.run_until_complete(bot.login(settings_dict['token']))
+
+    bot.load_extension('utilities')
+    vccog = VoiceController(bot)
+    bot.add_cog(vccog)
+
+    bot.loop.run_until_complete(bot.connect())
+
+except KeyboardInterrupt:
+    LOGGER.info('Caught a keyboard interrupt; triggering shutdown...')
+except Exception:
+    # NOTE: This exception isn't re-raised since it's logged
+    #   and will trigger the bot's shutdown procedure
+    LOGGER.critical(
+        'Encountered the following unrecoverable top-level exception; '
+        'stopping bot...',
+        exc_info=True
+    )
+finally:
+    bot.loop.run_until_complete(stop_and_cleanup())
+    bot.loop.close()
+    LOGGER.info("Bot stopped")

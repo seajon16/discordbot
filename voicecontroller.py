@@ -226,11 +226,6 @@ class VoiceController(commands.Cog, name='Voice'):
                                 'Disconnected from voice due to inactivity.'
                             )
                             LOGGER.info(f'VC timed out in {guild}#{guild_id}')
-                        else:
-                            LOGGER.warn(
-                                f'Guild #{guild_id} still had a GVR entry yet '
-                                'the bot did not have a voice connection to it'
-                            )
 
                     # Disconnects might silently fail when someone runs a leave
                     #   right after the bot creates a new voice client, so

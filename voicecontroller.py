@@ -491,7 +491,7 @@ class VoiceController(commands.Cog, name='Voice'):
     @commands.command(pass_context=True)
     @requires_guild_update
     async def play(self, ctx, *, desire: str=None):
-        """Play a a video's audio; give me a URL or a search term.
+        """Play a video's audio; give me a URL or a search term.
 
         Keyword/phrase searches are performed across YouTube.
         However, URLs can come from any of these sites:

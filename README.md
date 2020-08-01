@@ -19,10 +19,10 @@ Inactivity timeouts for hanging voice sessions.
     * A list of compatible websites can be found [here](https://rg3.github.io/youtube-dl/supportedsites.html)
   * `pause`/`resume`: Pause/resume an audio stream
   * `playing`: Display information about what's currently playing
-  * `reloadsb`: Reload soundboard by re-scanning the `sounds/` directory*
   * `say`: Use gTTS to interpret and play text-to-speech (defaults to `en-uk`)
   * `saylang`: Use gTTS to interpret and play text-to-speech in a given language
   * `sb`: Soundboard interface
+  * `sbreload`: Reload soundboard by re-scanning the `sounds/` directory*
   * `stop`: Stop playing audio
   * `volume`: Get or set the volume of whatever is currently playing
 \* must be my owner

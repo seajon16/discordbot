@@ -7,6 +7,7 @@ import random
 from gtts import gTTS
 from gtts.lang import tts_langs
 from youtube_dl import YoutubeDL
+from youtube_dl.utils import DownloadError
 from datetime import datetime, timedelta
 from functools import wraps, partial
 import logging
@@ -18,6 +19,7 @@ from settings import get_settings
 SOUND_DIR = 'sounds'
 GTTS_DEFAULT_LANG = 'en-uk'
 GTTS_TEMP_FILE = f'{SOUND_DIR}/temp_voice.mp3'
+
 FFMPEG_OPTS = {
     'before_options': \
         '-reconnect 1 ' \
@@ -33,6 +35,9 @@ YTDL_OPTS = {
     'source_address': '0.0.0.0'
 }
 YTDL = YoutubeDL(YTDL_OPTS)
+# Number of times to retry extracting video info before giving up
+# (Sometimes, YoutubeDL is unable to extract video info temporarily)
+YTDL_RETRIES = 3
 
 LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +71,25 @@ def ffmpeg_error_catcher(loop, channel, err):
         )
 
 
+async def split_send(ctx, msg):
+    """Send a message in segments.
+
+    It's possible for the bot to produce a message longer than 2k characters,
+    which discord does not support. This fixes this issue.
+    NOTE: Splits by newlines; there must be at least one per 2k characters.
+    """
+    start_p = 0
+    end_p = 1999
+    while end_p < len(msg):
+        if msg[end_p] != '\n':
+            end_p -= 1
+        else:
+            await ctx.send(msg[start_p:end_p])
+            start_p = end_p
+            end_p += 1999
+    await ctx.send(msg[start_p:])
+
+
 class YTDLSource(discord.PCMVolumeTransformer):
     """Wrapper for YoutubeDL streaing functionality.
 
@@ -96,9 +120,27 @@ class YTDLSource(discord.PCMVolumeTransformer):
             loop (async Event Loop, optional): The loop to run the search on.
         """
         loop = loop or asyncio.get_event_loop()
-        info = await loop.run_in_executor(
-            None, lambda: YTDL.extract_info(search, download=False)
-        )
+        for i in range(YTDL_RETRIES):
+            try:
+                info = await loop.run_in_executor(
+                    None, lambda: YTDL.extract_info(search, download=False)
+                )
+            except DownloadError:
+                if i < YTDL_RETRIES - 1:
+                    LOGGER.warn(
+                        'Youtube had an issue extracting video info; '
+                        'retrying in 3 seconds...'
+                    )
+                    await asyncio.sleep(3)
+                else:
+                    LOGGER.warn('Ran out of retries; giving up')
+                    await BananaCrime(
+                        'After multiple attempts, I was unable to find a video '
+                        'using what you gave me, so either you gave me a wonky '
+                        'search term or YoutubeDL is temporarily unhappy'
+                    )
+            else:
+                break
         # If it found multiple possibilities, just grab the 1st one
         if 'entries' in info:
             info = info['entries'][0]
@@ -292,7 +334,7 @@ class VoiceController(commands.Cog, name='Voice'):
 
     @commands.is_owner()
     @commands.command(pass_context=True, aliases=('reload',))
-    async def reloadsb(self, ctx):
+    async def sbreload(self, ctx):
         """Reload soundboard listing; must be my owner."""
         self.load_sounds()
         await ctx.send('Done.')
@@ -356,7 +398,9 @@ class VoiceController(commands.Cog, name='Voice'):
             )
 
         elif desire == 'all':
-            await ctx.send(
+            # Use split send since this guy can easily grow above 2k chars
+            await split_send(
+                ctx,
                 'All available sounds:\n'
                 + '\n'.join([
                     '\n'.join(sounds)
@@ -445,7 +489,12 @@ class VoiceController(commands.Cog, name='Voice'):
     @commands.command(pass_context=True)
     @requires_guild_update
     async def play(self, ctx, *, desire: str=None):
-        """Play a song. Give me a URL or a search term."""
+        """Play a a video's audio; give me a URL or a search term.
+
+        Keyword/phrase searches are performed across YouTube.
+        However, URLs can come from any of these sites:
+        https://rg3.github.io/youtube-dl/supportedsites.html
+        """
         if not desire:
             raise BananaCrime('Give me a search term')
 

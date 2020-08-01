@@ -23,6 +23,7 @@ Inactivity timeouts for hanging voice sessions.
   * `saylang`: Use gTTS to interpret and play text-to-speech in a given language
   * `sb`: Soundboard interface
   * `sbreload`: Reload soundboard by re-scanning the `sounds/` directory*
+  * `sbrequest`: Put in a request to add a sound to the soundboard
   * `stop`: Stop playing audio
   * `volume`: Get or set the volume of whatever is currently playing
 \* must be my owner
@@ -58,6 +59,7 @@ Inactivity timeouts for hanging voice sessions.
 * [`settings.json`](./settings.json) contains additional settings other than the bot `token`:
   * `logging`: The bot using the standard `logging` Python module; these are the settings used to configure the logger
     * If you'd like to change them, consult [the documentation](https://docs.python.org/3/library/logging.config.html)
+  * `sb_request_file`: Name of the file to write soundboard requests to
   * `vc_timeout_check_interval_secs`: The number of seconds between each time the bot checks for inactive voice clients
   * `vc_timeout_mins`: The number of minutes of inactivity before leaving a voice channel
 * If you want to have this bot join over 100 discord servers, you'll have to edit the `fetch_guilds` call in `VoiceController.init_guild_voice_records` of [`voicecontroller.py`](./voicecontroller.py); consult [the documentation](https://discordpy.readthedocs.io/en/latest/api.html#discord.Client.fetch_guilds) if this applies to you

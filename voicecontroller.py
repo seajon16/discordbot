@@ -42,6 +42,8 @@ YTDL_RETRIES = 3
 LOGGER = logging.getLogger(__name__)
 
 settings_dict = get_settings()
+# File to store soundboard requests in
+SB_REQ_FILENAME = settings_dict['sb_request_file']
 # Number of minutes of inactivity before leaving a voice channel
 VC_TIMEOUT = settings_dict['vc_timeout_mins']
 # Number of seconds between each time the bot checks for inactivity
@@ -573,3 +575,35 @@ class VoiceController(commands.Cog, name='Voice'):
 
         vclient.source.volume = vol / 100
         await ctx.send(f"Volume set to {vol}%.")
+
+    @commands.command(pass_context=True)
+    async def sbrequest(self, ctx, url, start_time=None, end_time=None):
+        """Put in a request to add a sound to the soundboard.
+
+        URL should link to the corresponding video.
+        Can optionally provide start/end timestamps in the format hh:mm:ss,
+        which would greatly be appreciated so I know what you're looking for,
+        especially if the video is longer than a few seconds.
+        If you give me anything invalid, I will know who you are and will
+        publicly shame you accordingly.
+        """
+        if 'dQw4w9WgXcQ' in url:
+            raise BananaCrime(
+                'Did you really just try to rick roll me? In 2020? Come on'
+            )
+        if len(url) > 100:
+            raise BananaCrime('URLs cannot be longer than 100 characters')
+        if (start_time and len(start_time) > 10) \
+            or (end_time and len(end_time) > 10):
+            raise BananaCrime('Timestamps cannot be longer than 10 characters')
+
+        with open(SB_REQ_FILENAME, 'a') as f:
+            f.write(f"[{datetime.now()}] {ctx.message.author} requests {url}")
+            if start_time:
+                f.write(f' from {start_time}')
+                if end_time:
+                    f.write(f' to {end_time}')
+            f.write('\n')
+
+        LOGGER.info('Recorded a soundboard request.')
+        await ctx.send('Request made.')

@@ -34,6 +34,7 @@
       }
     }
   },
+  "sb_request_file": "sb_requests.txt",
   "token": "[INSERT TOKEN HERE]",
   "vc_timeout_check_interval_secs": 60,
   "vc_timeout_mins": 30

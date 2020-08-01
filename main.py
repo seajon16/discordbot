@@ -1,5 +1,6 @@
 from discord import Game
 from discord.ext import commands
+from discord.errors import HTTPException
 from random import choice
 import logging
 import logging.config
@@ -73,6 +74,14 @@ async def on_command_error(ctx, ex):
     elif ex_type == commands.errors.CommandInvokeError \
         and type(ex.original) == BananaCrime:
         await ctx.send(f'{ex.original.crime}, you {choice(banana_names)}.')
+
+    elif ex_type == commands.errors.CommandInvokeError \
+        and type(ex.original) == HTTPException:
+        await ctx.send(
+            'You just managed to give me a command that made Discord angry.'
+        )
+        LOGGER.warn(f'Running {ctx.message.content} caused an HTTPException:')
+        raise ex
 
     elif ex_type == commands.errors.NotOwner:
         await ctx.send("You aren't my owner, you banana.")

@@ -136,10 +136,11 @@ class YTDLSource(discord.PCMVolumeTransformer):
                     await asyncio.sleep(3)
                 else:
                     LOGGER.warn('Ran out of retries; giving up')
-                    await BananaCrime(
+                    raise BananaCrime(
                         'After multiple attempts, I was unable to find a video '
                         'using what you gave me, so either you gave me a wonky '
-                        'search term or YoutubeDL is temporarily unhappy'
+                        'search term, the video I found required payment, or '
+                        'YoutubeDL is temporarily unhappy'
                     )
             else:
                 break

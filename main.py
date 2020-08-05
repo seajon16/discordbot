@@ -15,11 +15,15 @@ from voicecontroller import VoiceController
 settings_dict = get_settings()
 logging.config.dictConfig(settings_dict["logging"])
 LOGGER = logging.getLogger(__name__)
+SHUTDOWN_MESSAGE = """Greetings, gamers.
+The higher powers have issued a shutdown, therefore I shall now disappear.
+Fret not, my friends, for I shall return."""
 
 bot = commands.Bot(
     command_prefix='q.',
     description='Nifty bot that does things'
 )
+vccog = None
 
 # Used to give error messages more personality
 err_count = {}
@@ -121,17 +125,17 @@ async def on_ready():
     await bot.change_presence(activity=Game('q.help'))
 
 
-@bot.command()
-@commands.is_owner()
-async def shutdown(ctx):
-    """Gracefully shut down the bot; must be my owner."""
-    await ctx.send('okey dokey')
-    await bot.logout()
-
-
 async def stop_and_cleanup():
     """Stop the bot and perform loop cleanup."""
     LOGGER.info('Stopping bot...')
+    if vccog:
+        results = await vccog.tell_active_guilds(SHUTDOWN_MESSAGE)
+        for result in results:
+            if result and result.exception() is not None:
+                LOGGER.error(
+                    'Unable to inform a guild of shutdown: '\
+                    f'{type(err).__name__}, {err.args!r}'
+                )
     await bot.logout()
 
     tasks = [

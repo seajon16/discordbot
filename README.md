@@ -12,7 +12,6 @@ Inactivity timeouts for hanging voice sessions.
   * `help`: List all commands
   * `ping`/`howyoudoin`: Healthcheck
   * `roll`: Handle a dice roll in the form (A)dB(+C-D...)
-  * `shutdown`: Gracefully shut down the bot*
 * **Voice**
   * `join`/`leave`/`summon`: Join & leave voice channels
   * `play`: Stream a song/video audio, either by performing a search or directly using a URL using [`youtube-dl`](https://ytdl-org.github.io/youtube-dl/index.html)

@@ -298,6 +298,13 @@ class VoiceController(commands.Cog, name='Voice'):
             #   custom canceller/reaper
             LOGGER.critical('Inactivity checking task failed:', exc_info=True)
 
+    async def tell_active_guilds(self, msg):
+        """Send a message to all guilds with an active voice client."""
+        msg_coros = [
+            gvr.send(msg) for gvr in self.guild_voice_records.values() if gvr
+        ]
+        return await asyncio.gather(*msg_coros, return_exceptions=True)
+
     async def _summon(self, ctx):
         """Helper that attempts to join the VC of the caller.
 

@@ -333,11 +333,12 @@ class VoiceController(commands.Cog, name='Voice'):
         else:
             await target_channel.connect()
 
-    async def prepare_to_play(self, ctx):
+    async def prepare_to_play(self, ctx, require_silence=True):
         """Prepare to play an AudioSource.
 
-        Specifically, ensure I am not already playing something, and
-            if I'm not in a VC, attempt to join that of the caller.
+        Specifically, stop playback or complain if something's already playing
+        depending on the require_silence parameter, and if I'm not in a VC,
+        attempt to join that of the caller.
         NOTE: Does not perform any locking.
         """
         vclient = ctx.voice_client
@@ -346,9 +347,11 @@ class VoiceController(commands.Cog, name='Voice'):
             return ctx.voice_client
 
         if vclient.is_playing():
-            raise BananaCrime("I'm already playing something")
-
-        if vclient.is_paused():
+            if require_silence:
+                raise BananaCrime("I'm already playing something")
+            else:
+                vclient.stop()
+        elif vclient.is_paused():
             vclient.stop()
 
         return vclient
@@ -366,6 +369,11 @@ class VoiceController(commands.Cog, name='Voice'):
         """Join the given voice channel."""
         if not channel:
             raise BananaCrime('I need a channel to join')
+        if not channel.permissions_for(ctx.guild.me).connect:
+            raise BananaCrime(
+                "I don't have permission to join that voice channel"
+            )
+
         vclient = ctx.voice_client
         async with self.guild_voice_records[ctx.guild.id].lock:
             if vclient and vclient.is_connected():
@@ -444,7 +452,7 @@ class VoiceController(commands.Cog, name='Voice'):
             if guild_lock.locked():
                 raise BananaCrime("I'm already trying to process a VC command")
             async with guild_lock:
-                vclient = await self.prepare_to_play(ctx)
+                vclient = await self.prepare_to_play(ctx, False)
             path = f'{SOUND_DIR}/{category}/{random.choice(sounds)}.mp3'
             vclient.play(
                 discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(path), 0.5)
@@ -457,7 +465,7 @@ class VoiceController(commands.Cog, name='Voice'):
             if guild_lock.locked():
                 raise BananaCrime("I'm already trying to process a VC command")
             async with guild_lock:
-                vclient = await self.prepare_to_play(ctx)
+                vclient = await self.prepare_to_play(ctx, False)
             path = f'{SOUND_DIR}/{category}/{desire}.mp3'
             vclient.play(
                 discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(path), 0.5)

@@ -7,7 +7,7 @@ import random
 from gtts import gTTS
 from gtts.lang import tts_langs
 from youtube_dl import YoutubeDL
-from youtube_dl.utils import DownloadError
+from youtube_dl.utils import DownloadError, UnsupportedError
 from datetime import datetime, timedelta
 from functools import wraps, partial
 import logging
@@ -126,6 +126,12 @@ class YTDLSource(discord.PCMVolumeTransformer):
             try:
                 info = await loop.run_in_executor(
                     None, lambda: YTDL.extract_info(search, download=False)
+                )
+            except UnsupportedError:
+                raise BananaCrime(
+                    "I cannot stream audio from that website; see "
+                    "https://rg3.github.io/youtube-dl/supportedsites.html "
+                    "for a list of supported sites"
                 )
             except DownloadError:
                 if i < YTDL_RETRIES - 1:
@@ -314,6 +320,11 @@ class VoiceController(commands.Cog, name='Voice'):
         if not ctx.author.voice:
             raise BananaCrime('You are not in a voice channel')
         target_channel = ctx.author.voice.channel
+        if not target_channel.permissions_for(ctx.guild.me).connect:
+            raise BananaCrime(
+                "I don't have permission to join your voice channel"
+            )
+
         vclient = ctx.voice_client
         if vclient and vclient.is_connected():
             if vclient.channel == target_channel:

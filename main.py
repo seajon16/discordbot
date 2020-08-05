@@ -98,6 +98,25 @@ async def on_command_error(ctx, ex):
     elif ex_type == commands.errors.BadArgument:
         await ctx.send(ex.args[0])
 
+    elif ex_type == commands.errors.UnexpectedQuoteError:
+        await ctx.send(
+            "If you include a quote in an argument, you'll either need to "
+            "fully encase what you're trying to send me in quotes, or you need "
+            f"to escape it, you {choice(banana_names)}."
+        )
+
+    elif ex_type == commands.errors.InvalidEndOfQuotedStringError:
+        await ctx.send(
+            "You cannot place a character directly after the end of a quoted "
+            f"string, you {choice(banana_names)}."
+        )
+
+    elif ex_type == commands.errors.ExpectedClosingQuoteError:
+        await ctx.send(
+            "You did not complete your quoted string, "
+            f"you {choice(banana_names)}."
+        )
+
     else:
         await ctx.send('what are you doing')
         LOGGER.error(

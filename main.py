@@ -44,6 +44,7 @@ banana_names = [
 
 
 async def check_err_count(ctx):
+    """See if the author of the message is being a severe banana."""
     author = ctx.author
     if author in err_count:
         err_count[author] += 1
@@ -63,6 +64,7 @@ async def check_err_count(ctx):
 
 @bot.event
 async def on_command_error(ctx, ex):
+    """Perform error handling, reporting (to the guilds), and logging."""
     await check_err_count(ctx)
     ex_type = type(ex)
 
@@ -84,7 +86,10 @@ async def on_command_error(ctx, ex):
         await ctx.send(
             'You just managed to give me a command that made Discord angry.'
         )
-        LOGGER.warn(f'Running {ctx.message.content} caused an HTTPException:')
+        LOGGER.error(
+            f'Running {ctx.message.content} caused an HTTPException '
+            f'({type(ex).__name__}, {ex.args!r}):'
+        )
         raise ex
 
     elif ex_type == commands.errors.NotOwner:
@@ -95,12 +100,15 @@ async def on_command_error(ctx, ex):
 
     else:
         await ctx.send('what are you doing')
-        LOGGER.error('Unexpected exception thrown while handling a command:')
+        LOGGER.error(
+            f'Unexpected exception thrown ({type(ex).__name__}, {ex.args!r}) '
+            'while handling a command:')
         raise ex
 
 
 @bot.event
 async def on_command_completion(ctx):
+    """Update my list of error counts and praise people if need be."""
     author = ctx.author
     if author in err_count:
         if err_count[author] >= 9:
@@ -113,6 +121,7 @@ async def on_command_completion(ctx):
 
 @bot.event
 async def on_command(ctx):
+    """Log each command."""
     LOGGER.info(
         f'{ctx.message.author} in {ctx.guild}#{ctx.guild.id} '
         f'ran {ctx.message.content}'
@@ -121,6 +130,7 @@ async def on_command(ctx):
 
 @bot.event
 async def on_ready():
+    """Report I'm ready to go."""
     LOGGER.info(f'Logged in as {bot.user}')
     await bot.change_presence(activity=Game('q.help'))
 
@@ -191,6 +201,7 @@ except Exception:
         'stopping bot...',
         exc_info=True
     )
+
 finally:
     bot.loop.run_until_complete(stop_and_cleanup())
     bot.loop.close()

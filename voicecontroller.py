@@ -158,9 +158,9 @@ class GuildVoiceRecord:
         2. The Lock used by that guild to prevent spam-based issues
 
     Args:
-        last_channel (Channel): The text channel where the most recent voice-
-            related command was executed. If None, the `send` method will not
-            do anything.
+        last_channel (Channel, optional): The text channel where the most recent
+            voice-related command was executed. If None, the `send` method will
+            not do anything.
         dt (Datetime, optional): Datetime object to use for time comparisons;
             defaults to `now()`.
     """

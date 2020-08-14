@@ -410,8 +410,22 @@ class VoiceController(commands.Cog, name='Voice'):
         if not vclient:
             raise BananaCrime("I'm not in a voice channel")
 
+        guild_lock = self.guild_voice_records[ctx.guild.id].lock
+        # If I was called at the same time as I'm processing a command,
+        #   when I eventually get my turn to execute, I need to wait a moment
+        #   before leaving, otherwise the library will be confused
+        # In addition, passing this condition is a sneaky/mean thing to do, so
+        #   I'll also be sassy
+        should_wait = guild_lock.locked()
+        async with guild_lock:
+            if should_wait:
+                await asyncio.sleep(0.1)
+                await ctx.send(
+                    "You people need to make up your minds; do you want me to "
+                    "play something or not? :rolling_eyes:"
+                )
+            await ctx.voice_client.disconnect()
         self.guild_voice_records[ctx.guild.id] = None
-        await ctx.voice_client.disconnect()
 
     @commands.command(pass_context=True)
     @requires_guild_update

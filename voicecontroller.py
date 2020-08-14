@@ -74,7 +74,7 @@ def ffmpeg_error_catcher(loop, channel, err):
 
 
 async def split_send(ctx, msg):
-    """Send a message in segments.
+    """Send a message in segments of <2k characters.
 
     It's possible for the bot to produce a message longer than 2k characters,
     which discord does not support. This fixes this issue.

@@ -22,7 +22,13 @@ async def howyoudoin(ctx):
 
 @commands.command()
 async def roll(ctx, desire=None):
-    """Handle a dice roll in the form (A)dB(+C-D...)."""
+    """Handle a dice roll in the form (A)dB(+C-D...).
+
+    Examples:
+    * `d6` rolls a d6
+    * `2d4` rolls 2 d4's and adds them
+    * `4d20+4+2-1` rolls 4 d20's, adds them, then adds 5
+    """
     if not desire:
         raise BananaCrime(
             "Standard form using integers, d, +, and - "

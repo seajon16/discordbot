@@ -44,6 +44,8 @@ LOGGER = logging.getLogger(__name__)
 settings_dict = get_settings()
 # File to store soundboard requests in
 SB_REQ_FILENAME = settings_dict['sb_request_file']
+# Loose maximum allowed size of this file in bytes
+SB_REQ_FILE_MAX_SZ = settings_dict['sb_request_file_max_size']
 # Number of minutes of inactivity before leaving a voice channel
 VC_TIMEOUT = settings_dict['vc_timeout_mins']
 # Number of seconds between each time the bot checks for inactivity
@@ -361,7 +363,7 @@ class VoiceController(commands.Cog, name='Voice'):
     async def sbreload(self, ctx):
         """Reload soundboard listing; must be my owner."""
         self.load_sounds()
-        await ctx.send('Done.')
+        await ctx.message.add_reaction('\N{OK HAND SIGN}')
 
     @commands.command(pass_context=True)
     @requires_guild_update
@@ -632,6 +634,9 @@ class VoiceController(commands.Cog, name='Voice'):
             raise BananaCrime(
                 'Did you really just try to rick roll me? In 2020? Come on'
             )
+        if os.stat(SB_REQ_FILENAME) > SB_REQ_FILE_MAX_SZ:
+            await ctx.send("My request queue is too full; try again later.")
+            return
         if len(url) > 100:
             raise BananaCrime('URLs cannot be longer than 100 characters')
         if (start_time and len(start_time) > 10) \

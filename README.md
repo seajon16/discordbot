@@ -58,6 +58,7 @@ Inactivity timeouts for hanging voice sessions.
 * [`settings.json`](./settings.json) contains additional settings other than the bot `token`:
   * `logging`: The bot using the standard `logging` Python module; these are the settings used to configure the logger
     * If you'd like to change them, consult [the documentation](https://docs.python.org/3/library/logging.config.html)
+  * `sb_num_new`: When listing newest sounds on soundboard, list the most recent `sb_num_new` sounds
   * `sb_request_file`: Name of the file to write soundboard requests to
   * `sb_request_file_max_size`: Loose maximum allowed size of the soundboard request file in bytes
     * Specifically, a soundboard request can only be a certain number of bytes long; once the file grows over `sb_request_file_max_size` bytes, requests will be denied

@@ -41,7 +41,10 @@ YTDL_RETRIES = 3
 
 LOGGER = logging.getLogger(__name__)
 
+
 settings_dict = get_settings()
+# When listing newest sounds on soundboard, list most recently added NUM_NEW
+SB_NUM_NEW = settings_dict['sb_num_new']
 # File to store soundboard requests in
 SB_REQ_FILENAME = settings_dict['sb_request_file']
 # Loose maximum allowed size of this file in bytes
@@ -216,11 +219,14 @@ class VoiceController(commands.Cog, name='Voice'):
         self.category_to_sounds = {}  # used for easy listing
         self.sound_to_category = {}   # used to quickly check for membership
         # For each subdirectory (category) of sounds
-        for category in next(os.walk('sounds'))[1]:
+        for category in next(os.walk(SOUND_DIR))[1]:
             # Associate the category with its list of sounds
             sounds = [
-                sound[:-4] for sound in os.listdir(f'{SOUND_DIR}/{category}')
+                sound[:-4] for sound in os.listdir(
+                    os.path.join(SOUND_DIR, category)
+                )
             ]
+            # Check for duplicates
             for sound in sounds:
                 if sound in self.sound_to_category:
                     raise ValueError(
@@ -230,6 +236,17 @@ class VoiceController(commands.Cog, name='Voice'):
                     )
                 self.sound_to_category[sound] = category
             self.category_to_sounds[category] = sorted(sounds)
+        # Build list of newest sounds
+        self.newest_sounds = [
+            os.path.basename(sound)[:-4] for sound in sorted(
+                [
+                    os.path.join(SOUND_DIR, category, f'{sound}.mp3')
+                    for sound, category in self.sound_to_category.items()
+                ],
+                key=os.path.getmtime,
+                reverse=True
+            )[:SB_NUM_NEW]
+        ]
 
     async def init_guild_voice_records(self):
         """Populate the guild voice records with known guilds.
@@ -439,7 +456,7 @@ class VoiceController(commands.Cog, name='Voice'):
         if not desire:
             await ctx.send(
                 'Available categories: '
-                f'{", ".join(self.category_to_sounds)}, all'
+                f'{", ".join(self.category_to_sounds)}, new, all'
             )
 
         elif desire == 'all':
@@ -451,6 +468,11 @@ class VoiceController(commands.Cog, name='Voice'):
                     '\n'.join(sounds)
                     for sounds in self.category_to_sounds.values()
                 ])
+            )
+
+        elif desire == 'new':
+            await ctx.send(
+                'Most recently added sounds:\n' + "\n".join(self.newest_sounds)
             )
 
         # If they searched a category

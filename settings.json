@@ -34,6 +34,7 @@
       }
     }
   },
+  "sb_num_new": 10,
   "sb_request_file": "sb_requests.txt",
   "sb_request_file_max_size": 10000,
   "token": "[INSERT TOKEN HERE]",

@@ -656,7 +656,7 @@ class VoiceController(commands.Cog, name='Voice'):
             raise BananaCrime(
                 'Did you really just try to rick roll me? In 2020? Come on'
             )
-        if os.stat(SB_REQ_FILENAME) > SB_REQ_FILE_MAX_SZ:
+        if os.stat(SB_REQ_FILENAME).st_size > SB_REQ_FILE_MAX_SZ:
             await ctx.send("My request queue is too full; try again later.")
             return
         if len(url) > 100:

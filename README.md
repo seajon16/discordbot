@@ -21,6 +21,7 @@ Inactivity timeouts for hanging voice sessions.
   * `say`: Use gTTS to interpret and play text-to-speech (defaults to `en-uk`)
   * `saylang`: Use gTTS to interpret and play text-to-speech in a given language
   * `sb`: Soundboard interface
+  * `sbcount`: Display how many sounds are currently in the soundboard
   * `sbreload`: Reload soundboard by re-scanning the `sounds/` directory*
   * `sbrequest`: Put in a request to add a sound to the soundboard
   * `stop`: Stop playing audio

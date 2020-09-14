@@ -675,3 +675,8 @@ class VoiceController(commands.Cog, name='Voice'):
 
         LOGGER.info('Recorded a soundboard request.')
         await ctx.send('Request made.')
+
+    @commands.command(pass_context=True)
+    async def sbcount(self, ctx):
+        """Display how many sounds are currently in the soundboard."""
+        await ctx.send(f'Number of sounds: {len(self.sound_to_category)}')

@@ -1,7 +1,7 @@
 # Description
 A discord bot with nifty commands and a personality. \
 A number of utility commands like `roll` and `choose`. \
-Voice support, namely audio streaming, TTS message parsing, and customizable soundboard playing. \
+Voice support, namely audio streaming, TTS message parsing, and customizable soundboard playing with intelligent sound resolution using substring membership and edit distance. \
 Inactivity timeouts for hanging voice sessions.
 
 **Commands:**
@@ -18,9 +18,10 @@ Inactivity timeouts for hanging voice sessions.
     * A list of compatible websites can be found [here](https://rg3.github.io/youtube-dl/supportedsites.html)
   * `pause`/`resume`: Pause/resume an audio stream
   * `playing`: Display information about what's currently playing
+  * `refresh`: Refresh a voice connection to avoid voice connection timeout
   * `say`: Use gTTS to interpret and play text-to-speech (defaults to `en-uk`)
   * `saylang`: Use gTTS to interpret and play text-to-speech in a given language
-  * `sb`: Soundboard interface
+  * `sb`: Soundboard interface with guess-maker using substring membership and edit distance
   * `sbcount`: Display how many sounds are currently in the soundboard
   * `sbreload`: Reload soundboard by re-scanning the `sounds/` directory*
   * `sbrequest`: Put in a request to add a sound to the soundboard
@@ -36,6 +37,7 @@ Inactivity timeouts for hanging voice sessions.
     * `discord.py[voice]`
     * `gTTS`
     * `youtube-dl`
+    * `editdistance`
   * Not `pip`-able:
     * `ffmpeg`
       * For **Linux**, this is available through most package managers (i.e. `apt`)

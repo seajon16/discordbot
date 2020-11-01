@@ -11,14 +11,20 @@ from youtube_dl.utils import DownloadError, UnsupportedError
 from datetime import datetime, timedelta
 from functools import wraps, partial
 import logging
+import editdistance
 
 from exceptions import BananaCrime
 from settings import get_settings
 
 
+# Directory housing all sounds
 SOUND_DIR = 'sounds'
+# Default language to use with GTTS
 GTTS_DEFAULT_LANG = 'en-uk'
+# Where to store the temporary voice file when using GTTS
 GTTS_TEMP_FILE = f'{SOUND_DIR}/temp_voice.mp3'
+# Minimum edit distance for a requested `sb` sound request
+MIN_EDIT_DIST = 4
 
 FFMPEG_OPTS = {
     'before_options': \
@@ -98,7 +104,7 @@ async def split_send(ctx, msg):
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
-    """Wrapper for YoutubeDL streaing functionality.
+    """Wrapper for YoutubeDL streaming functionality.
 
     Shouldn't directly call the constructor; use `create_from_search` instead.
     Inspired by:
@@ -257,6 +263,17 @@ class VoiceController(commands.Cog, name='Voice'):
         async for guild in self.bot.fetch_guilds():
             self.guild_voice_records[guild.id] = None
 
+    def record_guild_update(self, ctx):
+        """Record that a voice action was performed in a guild.
+
+        Used to manage inactivity timeouts."""
+        gvr_obj = self.guild_voice_records.get(ctx.guild.id)
+        if gvr_obj:
+            gvr_obj.update(ctx.channel)
+        else:
+            self.guild_voice_records[ctx.guild.id] = \
+                GuildVoiceRecord(ctx.channel)
+
     def requires_guild_update(f):
         """Decorator that records a voice action was performed in a guild.
 
@@ -264,12 +281,7 @@ class VoiceController(commands.Cog, name='Voice'):
         """
         @wraps(f)
         async def wrapper(self, ctx, *args, **kwargs):
-            gvr_obj = self.guild_voice_records.get(ctx.guild.id)
-            if gvr_obj:
-                gvr_obj.update(ctx.channel)
-            else:
-                self.guild_voice_records[ctx.guild.id] = \
-                    GuildVoiceRecord(ctx.channel)
+            self.record_guild_update(ctx)
             await f(self, ctx, *args, **kwargs)
 
         return wrapper
@@ -446,6 +458,18 @@ class VoiceController(commands.Cog, name='Voice'):
             await ctx.voice_client.disconnect()
         self.guild_voice_records[ctx.guild.id] = None
 
+    async def play_sound(self, ctx, category, sound):
+        """Helper that plays a given sound belonging to a given category."""
+        guild_lock = self.guild_voice_records[ctx.guild.id].lock
+        if guild_lock.locked():
+            raise BananaCrime("I'm already trying to process a VC command")
+        async with guild_lock:
+            vclient = await self.prepare_to_play(ctx, False)
+        path = f'{SOUND_DIR}/{category}/{sound}.mp3'
+        vclient.play(
+            discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(path), 0.5)
+        )
+
     @commands.command(pass_context=True)
     @requires_guild_update
     async def sb(self, ctx, desire: str=None):
@@ -486,32 +510,49 @@ class VoiceController(commands.Cog, name='Voice'):
             category, sounds = random.choice(
                 list(self.category_to_sounds.items())
             )
-            guild_lock = self.guild_voice_records[ctx.guild.id].lock
-            if guild_lock.locked():
-                raise BananaCrime("I'm already trying to process a VC command")
-            async with guild_lock:
-                vclient = await self.prepare_to_play(ctx, False)
-            path = f'{SOUND_DIR}/{category}/{random.choice(sounds)}.mp3'
-            vclient.play(
-                discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(path), 0.5)
-            )
+            sound = random.choice(sounds)
+            await self.play_sound(ctx, category, sound)
+            await ctx.send(f"You just heard `{sound}`.")
 
-        # Ensure the sound exists
+        # If the sound exists
         elif desire in self.sound_to_category:
             category = self.sound_to_category[desire]
-            guild_lock = self.guild_voice_records[ctx.guild.id].lock
-            if guild_lock.locked():
-                raise BananaCrime("I'm already trying to process a VC command")
-            async with guild_lock:
-                vclient = await self.prepare_to_play(ctx, False)
-            path = f'{SOUND_DIR}/{category}/{desire}.mp3'
-            vclient.play(
-                discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(path), 0.5)
-            )
+            await self.play_sound(ctx, category, desire)
 
+        # See if we can guess what they meant
         else:
-            raise BananaCrime(
-                'Invalid category/sound name; try `q.sb` with no arguments'
+            substring_matches = [
+                sound for sound in self.sound_to_category
+                if desire in sound or sound in desire
+            ]
+            # Always go with substring membership before edit distance
+            if substring_matches:
+                sound = min(
+                    substring_matches,
+                    key=lambda p, l=len(desire): abs(len(p) - l)
+                )
+            # Didn't have any substring matches, go with edit distance
+            else:
+                sound = min(
+                    self.sound_to_category,
+                    key=partial(editdistance.eval, desire)
+                )
+                # Ensure it is within the minimum edit distance
+                sound = sound \
+                    if editdistance.eval(desire, sound) > MIN_EDIT_DIST \
+                    else None
+
+            # If I still didn't find anything, give up
+            if not sound:
+                raise BananaCrime(
+                    'Invalid category/sound name; try `q.sb` with no arguments'
+                )
+            # Otherwise, go for it
+            category = self.sound_to_category.get(sound)
+            await self.play_sound(ctx, category, sound)
+            await ctx.send(
+                f"`{desire}` isn't a valid sound, "
+                f"so I'll play `{sound}` instead."
             )
 
     @commands.command(pass_context=True)
@@ -680,3 +721,16 @@ class VoiceController(commands.Cog, name='Voice'):
     async def sbcount(self, ctx):
         """Display how many sounds are currently in the soundboard."""
         await ctx.send(f'Number of sounds: {len(self.sound_to_category)}')
+
+    @commands.command(pass_context=True)
+    async def refresh(self, ctx):
+        """Refresh my voice connection to prevent me from timing out."""
+        vclient = ctx.voice_client
+        # Don't even bother checking if there's a GVR, since this is the only
+        #   user-facing piece of information
+        if not vclient or not vclient.is_connected():
+            raise BananaCrime(
+                "I'm not in a voice channel, so there's no reason to refresh me"
+            )
+        self.record_guild_update(ctx)
+        await ctx.message.add_reaction('\N{OK HAND SIGN}')

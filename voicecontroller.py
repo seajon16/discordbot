@@ -114,14 +114,20 @@ class YTDLSource(discord.PCMVolumeTransformer):
     def __init__(self, source, info, volume=0.5):
         super().__init__(source, volume)
         self.title = info['title']
-        self.uploader = info['uploader']
-        self.duration_m, self.duration_s = divmod(info['duration'], 60)
+        self.uploader = info.get('uploader')
+        if 'duration' in info:
+            self.duration_m, self.duration_s = divmod(info['duration'], 60)
+        else:
+            self.duration_m = None
+            self.duration_s = None
 
     def __str__(self):
         return (
             f"{self.title}\n"
-            f"uploaded by {self.uploader}\n"
-            f"[{self.duration_m}m {self.duration_s}s]"
+            f"uploaded by {self.uploader or 'the void'}\n"
+            + (f"[{self.duration_m}m {self.duration_s}s]"
+                if self.duration_m or self.duration_s
+                else "[what on earth is this]")
         )
 
     @classmethod
@@ -187,6 +193,7 @@ class GuildVoiceRecord:
         self.last_channel = last_channel
         self.dt = dt or datetime.now()
         self.lock = asyncio.Lock()
+        self.searching_ytdl = False
 
     @property
     def should_timeout(self):
@@ -603,21 +610,30 @@ class VoiceController(commands.Cog, name='Voice'):
         However, URLs can come from any of these sites:
         https://rg3.github.io/youtube-dl/supportedsites.html
         """
+
         if not desire:
             raise BananaCrime('Give me a search term')
+        gvr = self.guild_voice_records[ctx.guild.id]
+        if gvr.searching_ytdl:
+            raise BananaCrime("I'm already trying to find a video")
 
-        async with self.guild_voice_records[ctx.guild.id].lock:
-            async with ctx.typing():
-                vclient = await self.prepare_to_play(ctx)
+        async with ctx.typing():
+            gvr.searching_ytdl = True
+            try:
                 ytdl_src = await YTDLSource.create_from_search(
                     desire, self.bot.loop
                 )
-                vclient.play(
-                    ytdl_src,
-                    after=partial(
-                        ffmpeg_error_catcher, self.bot.loop, ctx.channel
+                async with gvr.lock:
+                    vclient = await self.prepare_to_play(ctx)
+                    vclient.play(
+                        ytdl_src,
+                        after=partial(
+                            ffmpeg_error_catcher, self.bot.loop, ctx.channel
+                        )
                     )
-                )
+            finally:
+                gvr.searching_ytdl = False
+
             await ctx.send(f"*Now playing:*\n{ytdl_src}")
 
     @commands.command(pass_context=True)

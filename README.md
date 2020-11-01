@@ -1,7 +1,7 @@
 # Description
 A discord bot with nifty commands and a personality. \
 A number of utility commands like `roll` and `choose`. \
-Voice support, namely audio streaming, TTS message parsing, and customizable soundboard playing with intelligent sound resolution using substring membership and edit distance. \
+Voice support, namely TTS message parsing and customizable soundboard playing with intelligent sound resolution using substring membership and edit distance. \
 Inactivity timeouts for hanging voice sessions.
 
 **Commands:**
@@ -14,8 +14,6 @@ Inactivity timeouts for hanging voice sessions.
   * `roll`: Handle a dice roll in the form (A)dB(+C-D...)
 * **Voice**
   * `join`/`leave`/`summon`: Join & leave voice channels
-  * `play`: Stream a song/video audio, either by performing a search or directly using a URL using [`youtube-dl`](https://ytdl-org.github.io/youtube-dl/index.html)
-    * A list of compatible websites can be found [here](https://rg3.github.io/youtube-dl/supportedsites.html)
   * `pause`/`resume`: Pause/resume an audio stream
   * `playing`: Display information about what's currently playing
   * `refresh`: Refresh a voice connection to avoid voice connection timeout
@@ -32,16 +30,10 @@ Inactivity timeouts for hanging voice sessions.
 
 # Requirements
 * Python 3.7+
-* The following packages:
-  * `pip`-able:
-    * `discord.py[voice]`
-    * `gTTS`
-    * `youtube-dl`
-    * `editdistance`
-  * Not `pip`-able:
-    * `ffmpeg`
-      * For **Linux**, this is available through most package managers (i.e. `apt`)
-      * For **Windows**, follow [this tutorial](https://github.com/adaptlearning/adapt_authoring/wiki/Installing-FFmpeg) by Adapt Learning
+* The following `pip`-able packages:
+  * `discord.py[voice]`
+  * `gTTS`
+  * `editdistance`
 
 
 # Installation
@@ -69,11 +61,11 @@ Inactivity timeouts for hanging voice sessions.
   * `vc_timeout_mins`: The number of minutes of inactivity before leaving a voice channel
 * If you want to have this bot join over 100 discord servers, you'll have to edit the `fetch_guilds` call in `VoiceController.init_guild_voice_records` of [`voicecontroller.py`](./voicecontroller.py); consult [the documentation](https://discordpy.readthedocs.io/en/latest/api.html#discord.Client.fetch_guilds) if this applies to you
 
+
 # About
 I started this project wanting to gain experience working with asynchronous programming while producing code that I could use for goofy interactions during gaming sessions. It ended up revealing a number of nifty programming tricks like the Command pattern, partial functions, and how asynchronous programming lends itself to avoiding race conditions.
 
 
 # Additional Resources
 * [discord.py documentation](https://discordpy.readthedocs.io/en/latest/api.html)
-* [`basic_voice.py` example from discord.py's repo](https://github.com/Rapptz/discord.py/blob/master/examples/basic_voice.py), which partially inspired this bot's [`voicecontroller.py`](./voicecontroller.py)
 * [General discord.py FAQ](https://discordpy.readthedocs.io/en/latest/faq.html)

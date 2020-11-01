@@ -26,25 +26,6 @@ GTTS_TEMP_FILE = f'{SOUND_DIR}/temp_voice.mp3'
 # Minimum edit distance for a requested `sb` sound request
 MIN_EDIT_DIST = 4
 
-FFMPEG_OPTS = {
-    'before_options': \
-        '-reconnect 1 ' \
-        '-reconnect_streamed 1 ' \
-        '-reconnect_delay_max 5',
-    'options': '-vn'
-}
-YTDL_OPTS = {
-    'format': 'bestaudio/best',
-    'noplaylist': True,
-    'default_search': 'auto',
-    'quiet': True,
-    'source_address': '0.0.0.0'
-}
-YTDL = YoutubeDL(YTDL_OPTS)
-# Number of times to retry extracting video info before giving up
-# (Sometimes, YoutubeDL is unable to extract video info temporarily)
-YTDL_RETRIES = 3
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -59,29 +40,6 @@ SB_REQ_FILE_MAX_SZ = settings_dict['sb_request_file_max_size']
 VC_TIMEOUT = settings_dict['vc_timeout_mins']
 # Number of seconds between each time the bot checks for inactivity
 VC_CHECK_INTERVAL = settings_dict['vc_timeout_check_interval_secs']
-
-
-def ffmpeg_error_catcher(loop, channel, err):
-    """Passed into `VoiceContoller.play` to handle and report FFmpeg errors.
-
-    Inspired by:
-        https://discordpy.readthedocs.io/en/latest/faq.html#id13
-    """
-    if not err:
-        return
-    LOGGER.error(
-        f'FFmpeg failed while streaming: {type(err).__name__}, {err.args!r}'
-    )
-    reporter_coro = channel.send('Had an issue while streaming; try again.')
-    fut = asyncio.run_coroutine_threadsafe(reporter_coro, loop)
-    try:
-        fut.result()
-    except Exception as ex:
-        LOGGER.error(
-            "Not only did FFmpeg fail to stream, "
-            "I couldn't alert the guild that made the request: "
-            f"{type(ex).__name__}, {ex.args!r}"
-        )
 
 
 async def split_send(ctx, msg):
@@ -101,77 +59,6 @@ async def split_send(ctx, msg):
             start_p = end_p
             end_p += 1999
     await ctx.send(msg[start_p:])
-
-
-class YTDLSource(discord.PCMVolumeTransformer):
-    """Wrapper for YoutubeDL streaming functionality.
-
-    Shouldn't directly call the constructor; use `create_from_search` instead.
-    Inspired by:
-        https://github.com/Rapptz/discord.py/blob/master/examples/basic_voice.py
-    """
-
-    def __init__(self, source, info, volume=0.5):
-        super().__init__(source, volume)
-        self.title = info['title']
-        self.uploader = info.get('uploader')
-        if 'duration' in info:
-            self.duration_m, self.duration_s = divmod(info['duration'], 60)
-        else:
-            self.duration_m = None
-            self.duration_s = None
-
-    def __str__(self):
-        return (
-            f"{self.title}\n"
-            f"uploaded by {self.uploader or 'the void'}\n"
-            + (f"[{self.duration_m}m {self.duration_s}s]"
-                if self.duration_m or self.duration_s
-                else "[what on earth is this]")
-        )
-
-    @classmethod
-    async def create_from_search(cls, search, loop=None):
-        """Create a YTDLSource object using a search term.
-
-        Args:
-            search (str): The URL or search term to use to find audio.
-            loop (async Event Loop, optional): The loop to run the search on.
-        """
-        loop = loop or asyncio.get_event_loop()
-        for i in range(YTDL_RETRIES):
-            try:
-                info = await loop.run_in_executor(
-                    None, lambda: YTDL.extract_info(search, download=False)
-                )
-            except UnsupportedError:
-                raise BananaCrime(
-                    "I cannot stream audio from that website; see "
-                    "https://rg3.github.io/youtube-dl/supportedsites.html "
-                    "for a list of supported sites"
-                )
-            except DownloadError:
-                if i < YTDL_RETRIES - 1:
-                    LOGGER.warn(
-                        'Youtube had an issue extracting video info; '
-                        'retrying in 3 seconds...'
-                    )
-                    await asyncio.sleep(3)
-                else:
-                    LOGGER.warn('Ran out of retries; giving up')
-                    raise BananaCrime(
-                        'After multiple attempts, I was unable to find a video '
-                        'using what you gave me, so either you gave me a wonky '
-                        'search term, the video I found required payment, or '
-                        'YoutubeDL is temporarily unhappy'
-                    )
-            else:
-                break
-        # If it found multiple possibilities, just grab the 1st one
-        if 'entries' in info:
-            info = info['entries'][0]
-
-        return cls(discord.FFmpegPCMAudio(info['url'], **FFMPEG_OPTS), info)
 
 
 class GuildVoiceRecord:
@@ -607,37 +494,16 @@ class VoiceController(commands.Cog, name='Voice'):
     @commands.command(pass_context=True)
     @requires_guild_update
     async def play(self, ctx, *, desire: str=None):
-        """Play a video's audio; give me a URL or a search term.
+        """This command no longer works due to the DMCA strike against YTDL.
 
-        Keyword/phrase searches are performed across YouTube.
-        However, URLs can come from any of these sites:
-        https://rg3.github.io/youtube-dl/supportedsites.html
+        Read more about it here: https://github.com/github/dmca/pull/8153
         """
-
-        if not desire:
-            raise BananaCrime('Give me a search term')
-        gvr = self.guild_voice_records[ctx.guild.id]
-        if gvr.searching_ytdl:
-            raise BananaCrime("I'm already trying to find a video")
-
-        async with ctx.typing():
-            gvr.searching_ytdl = True
-            try:
-                ytdl_src = await YTDLSource.create_from_search(
-                    desire, self.bot.loop
-                )
-                async with gvr.lock:
-                    vclient = await self.prepare_to_play(ctx)
-                    vclient.play(
-                        ytdl_src,
-                        after=partial(
-                            ffmpeg_error_catcher, self.bot.loop, ctx.channel
-                        )
-                    )
-            finally:
-                gvr.searching_ytdl = False
-
-            await ctx.send(f"*Now playing:*\n{ytdl_src}")
+        await ctx.send(
+            "Due to recent developments, YTDL no longer is available, "
+            "therefore this command no longer works. See this link for more "
+            "context: https://github.com/github/dmca/pull/8153"
+        )
+        return
 
     @commands.command(pass_context=True)
     @requires_guild_update

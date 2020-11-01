@@ -309,7 +309,10 @@ class VoiceController(commands.Cog, name='Voice'):
                     vclient = guild.voice_client
                     if vrecord and vrecord.should_timeout:
                         self.guild_voice_records[guild.id] = None
-                        if vclient and vclient.is_connected():
+                        # Double check there's still an active voice connection
+                        if vclient and vclient.is_connected() \
+                                and not vclient.is_playing():
+                            # NOTE: If YTDL ever comes back, may tweak this
                             await vclient.disconnect()
                             await vrecord.send(
                                 'Disconnected from voice due to inactivity.'

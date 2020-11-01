@@ -6,8 +6,6 @@ from discord.ext import commands
 import random
 from gtts import gTTS
 from gtts.lang import tts_langs
-from youtube_dl import YoutubeDL
-from youtube_dl.utils import DownloadError, UnsupportedError
 from datetime import datetime, timedelta
 from functools import wraps, partial
 import logging

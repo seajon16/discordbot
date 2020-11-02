@@ -78,7 +78,6 @@ class GuildVoiceRecord:
         self.last_channel = last_channel
         self.dt = dt or datetime.now()
         self.lock = asyncio.Lock()
-        self.searching_ytdl = False
 
     @property
     def should_timeout(self):

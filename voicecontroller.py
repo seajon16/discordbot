@@ -339,32 +339,29 @@ class VoiceController(commands.Cog, name='Voice'):
 
         # See if we can guess what they meant
         else:
-            substring_matches = [
-                sound for sound in self.sound_to_category
-                if desire in sound or sound in desire
-            ]
-            # Always go with substring membership before edit distance
-            if substring_matches:
-                sound = min(
-                    substring_matches,
-                    key=lambda p, l=len(desire): abs(len(p) - l)
-                )
-            # Didn't have any substring matches, go with edit distance
-            else:
-                sound = min(
-                    self.sound_to_category,
-                    key=partial(editdistance.eval, desire)
-                )
-                # Ensure it is within the minimum edit distance
-                sound = sound \
-                    if editdistance.eval(desire, sound) > MIN_EDIT_DIST \
-                    else None
-
-            # If I still didn't find anything, give up
-            if not sound:
-                raise BananaCrime(
-                    'Invalid category/sound name; try `q.sb` with no arguments'
-                )
+            # Always go with edit distance before substring matching
+            sound = min(
+                self.sound_to_category,
+                key=partial(editdistance.eval, desire)
+            )
+            # Ensure it is within the minimum edit distance
+            # If no luck with edit distance, go with substring matching
+            if editdistance.eval(desire, sound) > MIN_EDIT_DIST:
+                substring_matches = [
+                    sound for sound in self.sound_to_category
+                    if desire in sound or sound in desire
+                ]
+                if substring_matches:
+                    sound = min(
+                        substring_matches,
+                        key=lambda p, l=len(desire): abs(len(p) - l)
+                    )
+                # If I still didn't find anything, give up
+                else:
+                    raise BananaCrime(
+                        'Invalid category/sound name; '
+                        f'try `{self.bot.command_prefix}sb` with no arguments'
+                    )
             # Otherwise, go for it
             category = self.sound_to_category.get(sound)
             await self.play_sound(ctx, category, sound)

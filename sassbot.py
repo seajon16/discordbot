@@ -249,7 +249,7 @@ class SassBot(commands.Bot):
         elif ex_type == commands.errors.MissingRequiredArgument:
             await ctx.send(
                 'You did not specify the correct number of arguments. '
-                'Try using `q.help {name of command}`.'
+                f'Try using `{self.command_prefix}help {{name of command}}`.'
             )
 
         elif ex_type == commands.errors.CommandInvokeError \
@@ -325,7 +325,7 @@ class SassBot(commands.Bot):
     async def on_ready(self):
         """Report I'm ready to go."""
         LOGGER.info(f'Logged in as {self.user}')
-        await self.change_presence(activity=Game('q.help'))
+        await self.change_presence(activity=Game(f'{self.command_prefix}help'))
 
     async def on_guild_join(self, guild):
         """Update records when I'm added to a guild."""

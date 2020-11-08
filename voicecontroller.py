@@ -8,7 +8,7 @@ from gtts import gTTS
 # _extra_langs is needed for now since there's a bug in gTTS
 from gtts.lang import tts_langs, _extra_langs
 from datetime import datetime
-from functools import wraps, partial
+from functools import partial
 import logging
 import editdistance
 

@@ -11,6 +11,9 @@ from exceptions import BananaCrime
 from voicecontroller import VoiceController
 from guilddb import GuildDB
 
+# Defaults
+DEFAULT_ACTIVE_TIMEOUT_CHECK_INTERVAL_S = 60
+DEFAULT_ACTIVE_TIMEOUT_M = 30
 
 LOGGER = logging.getLogger(__name__)
 
@@ -52,30 +55,33 @@ class SassBot(commands.Bot):
         "shutdown, therefore I shall now disappear. Fret not, my friends, " \
         "for I shall return."
 
-    def __init__(self, **settings):
+    def __init__(self, **kwargs):
         # Grab & remove settings base class doesn't need
-        self.parse_kwargs(settings)
+        self.parse_kwargs(kwargs)
 
         # Used for error customization
         self.err_count = {}
         # Manages additional per-guild info
         self.guild_db = GuildDB()
 
-        super().__init__(**settings)
+        super().__init__(**kwargs)
 
         self.load_extension('utilities')
         self.voice_controller = VoiceController(self, **self.voice_settings)
         self.add_cog(self.voice_controller)
 
     def parse_kwargs(self, kwargs):
-        """Helper to parse settings/kwargs and set defaults."""
+        """Helper to parse kwargs and set defaults."""
         if 'token' not in kwargs:
             raise KeyError('You must specify a Discord auth token')
 
         self.active_timeout_check_interval_s = kwargs.pop(
-            'active_timeout_check_interval_s'
+            'active_timeout_check_interval_s',
+            DEFAULT_ACTIVE_TIMEOUT_CHECK_INTERVAL_S
         )
-        self.active_timeout_m = kwargs.pop('active_timeout_m')
+        self.active_timeout_m = kwargs.pop(
+            'active_timeout_m', DEFAULT_ACTIVE_TIMEOUT_M
+        )
         self._token = kwargs.pop('token')
         self.voice_settings = kwargs.pop('voice_settings', dict())
 

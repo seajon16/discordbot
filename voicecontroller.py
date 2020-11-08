@@ -1,17 +1,3 @@
-"""
-TODO make join take unquoted string then convert to channel
-TODO server settings as discussed in memory
-TODO in memory -> on disc
-
-TODO timeout sound
-TODO ey yo wtf on 3rd err
-TODO add queue system to sb
-TODO bomb cmd
-TODO add timeout to play for longer songs; actually enforce reload
-TODO don't make sb_requests_txt mandatory
-"""
-
-
 import asyncio
 import os
 import discord
@@ -488,18 +474,4 @@ class VoiceController(commands.Cog, name='Voice'):
                 "I'm not in a voice channel, so there's no reason to refresh me"
             )
         self.record_guild_update(ctx)
-        await ctx.message.add_reaction('\N{OK HAND SIGN}')
-
-    @commands.is_owner()
-    @commands.command(pass_context=True)
-    async def tellguild(self, ctx, guild_id: int, *, msg):
-        """Send a message to the guild with the given ID; must be my owner."""
-        gvr = self.bot.guild_records.get(guild_id)
-        if gvr:
-            await gvr.send(msg)
-        else:
-            target_guild = self.bot.get_guild(guild_id)
-            if not target_guild:
-                raise BananaCrime("I'm not in that guild")
-            await target_guild.text_channels[0].send(msg)
         await ctx.message.add_reaction('\N{OK HAND SIGN}')

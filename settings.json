@@ -1,4 +1,16 @@
 {
+  "bot_settings": {
+    "active_timeout_check_interval_s": 60,
+    "active_timeout_m": 30,
+    "command_prefix": "q.",
+    "description": "Nifty bot that does things",
+    "token": "[INSERT TOKEN HERE]",
+    "voice_settings": {
+      "sb_num_new": 20,
+      "sb_request_file_max_size": 10000,
+      "sb_request_filename": "sb_requests.txt"
+    }
+  },
   "logging": {
     "version": 1,
     "disable_existing_loggers": false,
@@ -22,7 +34,7 @@
         "propagate": false,
         "level": "INFO"
       },
-      "voicecontroller": {
+      "sassbot": {
         "handlers": ["console"],
         "propagate": false,
         "level": "INFO"
@@ -31,13 +43,12 @@
         "handlers": ["console"],
         "propagate": false,
         "level": "INFO"
+      },
+      "voicecontroller": {
+        "handlers": ["console"],
+        "propagate": false,
+        "level": "INFO"
       }
     }
-  },
-  "sb_num_new": 10,
-  "sb_request_file": "sb_requests.txt",
-  "sb_request_file_max_size": 10000,
-  "token": "[INSERT TOKEN HERE]",
-  "vc_timeout_check_interval_secs": 60,
-  "vc_timeout_mins": 30
+  }
 }

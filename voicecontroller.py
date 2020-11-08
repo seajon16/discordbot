@@ -1,3 +1,17 @@
+"""
+TODO make join take unquoted string then convert to channel
+TODO server settings as discussed in memory
+TODO in memory -> on disc
+
+TODO timeout sound
+TODO ey yo wtf on 3rd err
+TODO add queue system to sb
+TODO bomb cmd
+TODO add timeout to play for longer songs; actually enforce reload
+TODO don't make sb_requests_txt mandatory
+"""
+
+
 import asyncio
 import os
 import discord
@@ -5,15 +19,20 @@ from discord import VoiceChannel
 from discord.ext import commands
 import random
 from gtts import gTTS
-from gtts.lang import tts_langs
-from datetime import datetime, timedelta
+# _extra_langs is needed for now since there's a bug in gTTS
+from gtts.lang import tts_langs, _extra_langs
+from datetime import datetime
 from functools import wraps, partial
 import logging
 import editdistance
 
 from exceptions import BananaCrime
-from settings import get_settings
 
+
+# Defaults
+DEFAULT_SB_NUM_NEW = 20
+DEFAULT_SB_REQUEST_FILE_MAX_SIZE_B = 10000
+DEFAULT_SB_REQUEST_FILENAME = 'sb_requests.txt'
 
 # Directory housing all sounds
 SOUND_DIR = 'sounds'
@@ -25,19 +44,6 @@ GTTS_TEMP_FILE = f'{SOUND_DIR}/temp_voice.mp3'
 MIN_EDIT_DIST = 4
 
 LOGGER = logging.getLogger(__name__)
-
-
-settings_dict = get_settings()
-# When listing newest sounds on soundboard, list most recently added NUM_NEW
-SB_NUM_NEW = settings_dict['sb_num_new']
-# File to store soundboard requests in
-SB_REQ_FILENAME = settings_dict['sb_request_file']
-# Loose maximum allowed size of this file in bytes
-SB_REQ_FILE_MAX_SZ = settings_dict['sb_request_file_max_size']
-# Number of minutes of inactivity before leaving a voice channel
-VC_TIMEOUT = settings_dict['vc_timeout_mins']
-# Number of seconds between each time the bot checks for inactivity
-VC_CHECK_INTERVAL = settings_dict['vc_timeout_check_interval_secs']
 
 
 async def split_send(ctx, msg):
@@ -59,57 +65,42 @@ async def split_send(ctx, msg):
     await ctx.send(msg[start_p:])
 
 
-class GuildVoiceRecord:
-    """Represents additional data needed on a per-guild basis when using Voice.
-
-    Specifically:
-        1. The last channel a voice-related command was executed & when
-        2. The Lock used by that guild to prevent spam-based issues
-
-    Args:
-        last_channel (Channel, optional): The text channel where the most recent
-            voice-related command was executed. If None, the `send` method will
-            not do anything.
-        dt (Datetime, optional): Datetime object to use for time comparisons;
-            defaults to `now()`.
-    """
-
-    def __init__(self, last_channel=None, dt=None):
-        self.last_channel = last_channel
-        self.dt = dt or datetime.now()
-        self.lock = asyncio.Lock()
-
-    @property
-    def should_timeout(self):
-        """Return if the GVA should be timed out using VC_TIMEOUT."""
-        return self.dt + timedelta(minutes=VC_TIMEOUT) < datetime.now()
-
-    def update(self, last_channel):
-        """Update the object by recording the new most recent voice command."""
-        self.last_channel = last_channel
-        self.dt = datetime.now()
-
-    async def send(self, msg):
-        """Send a message to my last channel if I have one, else do nothing."""
-        if self.last_channel:
-            await self.last_channel.send(msg)
-
-
 class VoiceController(commands.Cog, name='Voice'):
     """Handles all voice-related functionality.
 
     Will read soundboard files from SOUND_DIR.
     NOTE: There cannot be sounds with duplicate filenames.
+
+    Args:
+        sb_num_new (str): When listing newest sounds on soundboard, list the
+            most recent sb_num_new sounds.
+        sb_request_filename (str): Name of the file to write soundboard requests to.
+        sb_request_file_max_size_b (int): Loose maximum allowed size of the
+            soundboard request file in bytes. Specifically, a soundboard request
+            can only be a certain number of bytes long; once the file grows over
+            sb_request_file_max_size_b bytes, requests will be denied.
     """
 
-    def __init__(self, bot):
+    def __init__(self, bot, **kwargs):
         self.bot = bot
+        self.parse_kwargs(kwargs)
+
         # Grab valid TTS languages from `gtts.lang` to give language options
-        self.valid_tts_langs = tts_langs()
+        try:
+            self.valid_tts_langs = tts_langs()
+        except RuntimeError:
+            self.valid_tts_langs = _extra_langs()
         self.load_sounds()
-        # Perform VC timeout setup
-        bot.loop.run_until_complete(self.init_guild_voice_records())
-        bot.loop.create_task(self.inactivity_checker())
+
+    def parse_kwargs(self, kwargs):
+        """Helper to parse kwargs and set defaults."""
+        self.sb_num_new = kwargs.get('sb_num_new', DEFAULT_SB_NUM_NEW)
+        self.sb_request_file_max_size_b = kwargs.get(
+            'sb_request_file_max_size_b', DEFAULT_SB_REQUEST_FILE_MAX_SIZE_B
+        )
+        self.sb_request_filename = kwargs.get(
+            'sb_request_filename', DEFAULT_SB_REQUEST_FILENAME
+        )
 
     def load_sounds(self):
         """Build the dictionaries relating categories and lists of sounds."""
@@ -142,100 +133,50 @@ class VoiceController(commands.Cog, name='Voice'):
                 ],
                 key=os.path.getmtime,
                 reverse=True
-            )[:SB_NUM_NEW]
+            )[:self.sb_num_new]
         ]
 
-    async def init_guild_voice_records(self):
-        """Populate the guild voice records with known guilds.
-
-        NOTE: By default, only grabs 100.
-        """
-        self.guild_voice_records = {}
-        async for guild in self.bot.fetch_guilds():
-            self.guild_voice_records[guild.id] = None
-
-    def record_guild_update(self, ctx):
-        """Record that a voice action was performed in a guild.
-
-        Used to manage inactivity timeouts."""
-        gvr_obj = self.guild_voice_records.get(ctx.guild.id)
-        if gvr_obj:
-            gvr_obj.update(ctx.channel)
-        else:
-            self.guild_voice_records[ctx.guild.id] = \
-                GuildVoiceRecord(ctx.channel)
-
-    def requires_guild_update(f):
-        """Decorator that records a voice action was performed in a guild.
-
-        Used to manage inactivity timeouts.
-        """
-        @wraps(f)
-        async def wrapper(self, ctx, *args, **kwargs):
-            self.record_guild_update(ctx)
-            await f(self, ctx, *args, **kwargs)
-
-        return wrapper
-
-    async def inactivity_checker(self):
-        """Periodic task that removes inactive voice connections."""
-        await self.bot.wait_until_ready()
-
-        try:
-            while True:
-                for guild_id, vrecord in self.guild_voice_records.items():
-                    guild = self.bot.get_guild(guild_id)
-                    # Edge case where the API couldn't find the guild
-                    # This'll get picked up next cylce, so ignore it for now
-                    if not guild:
-                        continue
-
-                    vclient = guild.voice_client
-                    if vrecord and vrecord.should_timeout:
-                        self.guild_voice_records[guild.id] = None
-                        # Double check there's still an active voice connection
-                        if vclient and vclient.is_connected() \
-                                and not vclient.is_playing():
-                            # NOTE: If YTDL ever comes back, may tweak this
-                            await vclient.disconnect()
-                            await vrecord.send(
-                                'Disconnected from voice due to inactivity.'
-                            )
-                            LOGGER.info(f'VC timed out in {guild}#{guild_id}')
-
-                    # Disconnects might silently fail when someone runs a leave
-                    #   right after the bot creates a new voice client, so
-                    #   guild_voice_records might be missing a GVR
-                    # If we just put a retry wrapper around disconnect calls,
-                    #   it still can't detect it without introducing unnecessary
-                    #   delays for all disconnects, since voice clients don't
-                    #   reflect the issue until after the bot re-syncs w discord
-                    elif not vrecord and vclient and vclient.is_connected():
-                        # Since this is so rare and can only happen when someone
-                        #   already tried executing leave, don't even give a
-                        #   channel to send a timeout message to
-                        self.guild_voice_records[guild_id] = GuildVoiceRecord()
-                        LOGGER.info(
-                            f'Handled missing GVR in {guild}#{guild_id}'
-                        )
-
-                await asyncio.sleep(VC_CHECK_INTERVAL)
-
-        except asyncio.CancelledError:
-            LOGGER.debug('Inactivity checking task was cancelled')
-        except Exception:
-            # NOTE: This exception isn't re-raised since it gets logged
-            #   and already stopped/"finished" the task; if we raised it again,
-            #   discord.py's main handler would report it again unless we made a
-            #   custom canceller/reaper
-            LOGGER.critical('Inactivity checking task failed:', exc_info=True)
-
-    async def tell_active_guilds(self, msg):
-        """Send a message to all guilds with an active voice client."""
-        msg_coros = [
-            gvr.send(msg) for gvr in self.guild_voice_records.values() if gvr
+    async def close(self):
+        """Disconnect all voice clients."""
+        active_vclients = [
+            record.guild.voice_client
+            for record in self.bot.guild_records.values()
+            if record.guild.voice_client
+                and record.guild.voice_client.is_connected()
         ]
-        return await asyncio.gather(*msg_coros, return_exceptions=True)
+        dc_coros = [vclient.disconnect() for vclient in active_vclients]
+        results = await asyncio.gather(*dc_coros, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                LOGGER.error(
+                    'Unable to close a voice client: '\
+                    f'{type(result).__name__}, {result.args!r}'
+                )
+
+    async def check_record_for_inactivity(self, record):
+        """Check record for timeout, and do so if required."""
+        guild = record.guild
+        vclient = guild.voice_client
+        if record.should_timeout:
+            record.mark_inactive()
+            # Double check there's still an active voice connection that isn't
+            #   playing something currently
+            if vclient and vclient.is_connected() and not vclient.is_playing():
+                # NOTE: If YTDL ever comes back, may tweak this
+                await vclient.disconnect()
+                await record.send('Disconnected from voice due to inactivity.')
+                LOGGER.info(f'VC timed out in {guild}#{guild.id}')
+
+        # Disconnects might silently fail when someone runs a leave
+        #   right after the bot creates a new voice client, so
+        #   bot.guild_records might be missing a GVR
+        # If we just put a retry wrapper around disconnect calls,
+        #   it still can't detect it without introducing unnecessary
+        #   delays for all disconnects, since voice clients don't
+        #   reflect the issue until after the bot re-syncs w discord
+        elif not record.is_active and vclient and vclient.is_connected():
+            record.update()
+            LOGGER.info(f'Handled missing GVR in {guild}#{guild.id}')
 
     async def _summon(self, ctx):
         """Helper that attempts to join the VC of the caller.
@@ -289,7 +230,6 @@ class VoiceController(commands.Cog, name='Voice'):
         await ctx.message.add_reaction('\N{OK HAND SIGN}')
 
     @commands.command(pass_context=True)
-    @requires_guild_update
     async def join(self, ctx, channel: VoiceChannel=None):
         """Join the given voice channel."""
         if not channel:
@@ -300,7 +240,7 @@ class VoiceController(commands.Cog, name='Voice'):
             )
 
         vclient = ctx.voice_client
-        async with self.guild_voice_records[ctx.guild.id].lock:
+        async with self.bot.guild_records[ctx.guild.id].lock:
             if vclient and vclient.is_connected():
                 if vclient.channel == channel:
                     raise BananaCrime("I'm already in this channel")
@@ -309,14 +249,12 @@ class VoiceController(commands.Cog, name='Voice'):
                 await channel.connect()
 
     @commands.command(pass_context=True)
-    @requires_guild_update
     async def summon(self, ctx):
         """Join the voice channel of the caller."""
-        async with self.guild_voice_records[ctx.guild.id].lock:
+        async with self.bot.guild_records[ctx.guild.id].lock:
             await self._summon(ctx)
 
     @commands.command(pass_context=True)
-    @requires_guild_update
     async def stop(self, ctx):
         """Stop all playback but stays in channel."""
         vclient = ctx.voice_client
@@ -335,7 +273,7 @@ class VoiceController(commands.Cog, name='Voice'):
         if not vclient:
             raise BananaCrime("I'm not in a voice channel")
 
-        guild_lock = self.guild_voice_records[ctx.guild.id].lock
+        guild_lock = self.bot.guild_records[ctx.guild.id].lock
         # If I was called at the same time as I'm processing a command,
         #   when I eventually get my turn to execute, I need to wait a moment
         #   before leaving, otherwise the library will be confused
@@ -349,12 +287,13 @@ class VoiceController(commands.Cog, name='Voice'):
                     "You people need to make up your minds; do you want me to "
                     "play something or not? :rolling_eyes:"
                 )
+            ctx.voice_client.stop()
             await ctx.voice_client.disconnect()
-        self.guild_voice_records[ctx.guild.id] = None
+        self.bot.guild_records[ctx.guild.id].mark_inactive()
 
     async def play_sound(self, ctx, category, sound):
         """Helper that plays a given sound belonging to a given category."""
-        guild_lock = self.guild_voice_records[ctx.guild.id].lock
+        guild_lock = self.bot.guild_records[ctx.guild.id].lock
         if guild_lock.locked():
             raise BananaCrime("I'm already trying to process a VC command")
         async with guild_lock:
@@ -365,7 +304,6 @@ class VoiceController(commands.Cog, name='Voice'):
         )
 
     @commands.command(pass_context=True)
-    @requires_guild_update
     async def sb(self, ctx, desire: str=None):
         """Play a given sound from the soundboard.
 
@@ -390,7 +328,7 @@ class VoiceController(commands.Cog, name='Voice'):
 
         elif desire == 'new':
             await ctx.send(
-                'Most recently added sounds:\n' + "\n".join(self.newest_sounds)
+                'Most recently added sounds:\n' + '\n'.join(self.newest_sounds)
             )
 
         # If they searched a category
@@ -450,13 +388,11 @@ class VoiceController(commands.Cog, name='Voice'):
             )
 
     @commands.command(pass_context=True)
-    @requires_guild_update
     async def say(self, ctx, *, desire=None):
         """Use gTTS to play a text-to-speech message."""
         await ctx.invoke(self.saylang, GTTS_DEFAULT_LANG, desire=desire)
 
     @commands.command(pass_context=True)
-    @requires_guild_update
     async def saylang(self, ctx, lang=None, *, desire=None):
         """Use gTTS to play a text-to-speech message using a given language."""
         if not lang:
@@ -470,7 +406,7 @@ class VoiceController(commands.Cog, name='Voice'):
         if not desire:
             raise BananaCrime('Give me text to speak')
 
-        async with self.guild_voice_records[ctx.guild.id].lock:
+        async with self.bot.guild_records[ctx.guild.id].lock:
             vclient = await self.prepare_to_play(ctx)
         try:
             tts = gTTS(desire, lang=lang)
@@ -489,7 +425,6 @@ class VoiceController(commands.Cog, name='Voice'):
         )
 
     @commands.command(pass_context=True)
-    @requires_guild_update
     async def play(self, ctx, *, desire: str=None):
         """This command no longer works due to the DMCA strike against YTDL.
 
@@ -500,69 +435,6 @@ class VoiceController(commands.Cog, name='Voice'):
             "therefore this command no longer works. See this link for more "
             "context: https://github.com/github/dmca/pull/8153"
         )
-        return
-
-    @commands.command(pass_context=True)
-    @requires_guild_update
-    async def pause(self, ctx):
-        """Pause song playback."""
-        vclient = ctx.voice_client
-        if not vclient or not vclient.is_playing():
-            raise BananaCrime("I'm not playing anything")
-        if type(vclient.source) != YTDLSource:
-            raise BananaCrime("You can't pause the soundboard")
-
-        vclient.pause()
-
-    @commands.command(pass_context=True)
-    @requires_guild_update
-    async def resume(self, ctx):
-        """Resume playing a song."""
-        vclient = ctx.voice_client
-        if not vclient or not vclient.is_connected():
-            raise BananaCrime("I'm not in a voice channel")
-        if type(vclient.source) != YTDLSource:
-            raise BananaCrime("You can't pause/unpause the soundboard")
-        if not vclient.is_paused():
-            raise BananaCrime("I'm not paused")
-
-        vclient.resume()
-
-    @commands.command(pass_context=True)
-    @requires_guild_update
-    async def playing(self, ctx):
-        """Get the information of the currently playing song, if any."""
-        vclient = ctx.voice_client
-        if not vclient or not vclient.is_connected():
-            raise BananaCrime("I'm not even in a voice channel")
-
-        if (vclient.is_playing() or vclient.is_paused()) \
-            and type(vclient.source) == YTDLSource:
-            await ctx.send(f"*Currently playing:*\n{vclient.source}")
-        else:
-            raise BananaCrime("I'm not playing any songs at the moment")
-
-    @commands.command(pass_context=True)
-    @requires_guild_update
-    async def volume(self, ctx, vol: int=None):
-        """Get or set the volume of whatever is currently playing.
-
-        Takes a percentage as an integer, if any.
-        """
-        vclient = ctx.voice_client
-        if not vclient or not vclient.is_connected():
-            raise BananaCrime("I'm not even in a voice channel")
-        if not vclient.is_playing():
-            raise BananaCrime("I'm not playing anything")
-        if vol is None:
-            await ctx.send(
-                f'Volume is currently at {int(vclient.source.volume * 100)}%.')
-            return
-        if not vol >= 0 or not vol <= 100:
-            raise BananaCrime("That's not a valid integer percentage (0-100)")
-
-        vclient.source.volume = vol / 100
-        await ctx.send(f"Volume set to {vol}%.")
 
     @commands.command(pass_context=True)
     async def sbrequest(self, ctx, url, start_time=None, end_time=None):
@@ -579,7 +451,8 @@ class VoiceController(commands.Cog, name='Voice'):
             raise BananaCrime(
                 'Did you really just try to rick roll me? In 2020? Come on'
             )
-        if os.stat(SB_REQ_FILENAME).st_size > SB_REQ_FILE_MAX_SZ:
+        if os.stat(self.sb_request_filename).st_size \
+                > self.sb_request_file_max_size_b:
             await ctx.send("My request queue is too full; try again later.")
             return
         if len(url) > 100:
@@ -588,7 +461,7 @@ class VoiceController(commands.Cog, name='Voice'):
             or (end_time and len(end_time) > 10):
             raise BananaCrime('Timestamps cannot be longer than 10 characters')
 
-        with open(SB_REQ_FILENAME, 'a') as f:
+        with open(self.sb_request_filename, 'a') as f:
             f.write(f"[{datetime.now()}] {ctx.message.author} requests {url}")
             if start_time:
                 f.write(f' from {start_time}')
@@ -606,7 +479,7 @@ class VoiceController(commands.Cog, name='Voice'):
 
     @commands.command(pass_context=True)
     async def refresh(self, ctx):
-        """Refresh my voice connection to prevent me from timing out."""
+        """Refresh my connection to prevent me from timing out."""
         vclient = ctx.voice_client
         # Don't even bother checking if there's a GVR, since this is the only
         #   user-facing piece of information
@@ -615,4 +488,18 @@ class VoiceController(commands.Cog, name='Voice'):
                 "I'm not in a voice channel, so there's no reason to refresh me"
             )
         self.record_guild_update(ctx)
+        await ctx.message.add_reaction('\N{OK HAND SIGN}')
+
+    @commands.is_owner()
+    @commands.command(pass_context=True)
+    async def tellguild(self, ctx, guild_id: int, *, msg):
+        """Send a message to the guild with the given ID; must be my owner."""
+        gvr = self.bot.guild_records.get(guild_id)
+        if gvr:
+            await gvr.send(msg)
+        else:
+            target_guild = self.bot.get_guild(guild_id)
+            if not target_guild:
+                raise BananaCrime("I'm not in that guild")
+            await target_guild.text_channels[0].send(msg)
         await ctx.message.add_reaction('\N{OK HAND SIGN}')

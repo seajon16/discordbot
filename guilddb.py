@@ -1,6 +1,5 @@
 import asyncio
 from datetime import datetime, timedelta
-from discord.ext.commands import Context
 
 
 DEFAULT_ACTIVE_TIMEOUT_M = 30
@@ -70,7 +69,7 @@ class GuildDB:
     def add_guild(self, guild):
         self.records[guild.id] = GuildRecord(guild)
 
-    def update_record(self, ctx: Context):
+    def update_record(self, ctx):
         self.records[ctx.guild.id].update(ctx.channel)
 
     @property

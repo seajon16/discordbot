@@ -463,12 +463,5 @@ class VoiceController(commands.Cog, name='Voice'):
     @commands.command(pass_context=True)
     async def refresh(self, ctx):
         """Refresh my connection to prevent me from timing out."""
-        vclient = ctx.voice_client
-        # Don't even bother checking if there's a GVR, since this is the only
-        #   user-facing piece of information
-        if not vclient or not vclient.is_connected():
-            raise BananaCrime(
-                "I'm not in a voice channel, so there's no reason to refresh me"
-            )
-        self.record_guild_update(ctx)
+        # This is basically just a nop since the on_command performs updates
         await ctx.message.add_reaction('\N{OK HAND SIGN}')

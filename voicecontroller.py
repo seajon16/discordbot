@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import discord
 from discord import VoiceChannel
@@ -10,7 +11,7 @@ from gtts.lang import tts_langs, _extra_langs
 from datetime import datetime
 from youtube_dl import YoutubeDL
 from youtube_dl.utils import DownloadError, UnsupportedError
-from functools import wraps, partial
+from functools import partial
 import logging
 import editdistance
 
@@ -108,7 +109,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.title = info['title']
         self.uploader = info.get('uploader')
         if 'duration' in info:
-            self.duration_m, self.duration_s = divmod(info['duration'], 60)
+            self.duration_m, self.duration_s = divmod(int(info['duration']), 60)
         else:
             self.duration_m = None
             self.duration_s = None
@@ -131,11 +132,12 @@ class YTDLSource(discord.PCMVolumeTransformer):
             loop (async Event Loop, optional): The loop to run the search on.
         """
         loop = loop or asyncio.get_event_loop()
-        for i in range(YTDL_RETRIES):
+        for _ in range(YTDL_RETRIES):
             try:
                 info = await loop.run_in_executor(
                     None, lambda: YTDL.extract_info(search, download=False)
                 )
+                break
             except UnsupportedError:
                 raise BananaCrime(
                     "I cannot stream audio from that website; see "
@@ -143,22 +145,19 @@ class YTDLSource(discord.PCMVolumeTransformer):
                     "for a list of supported sites"
                 )
             except DownloadError:
-                if i < YTDL_RETRIES - 1:
-                    LOGGER.warn(
-                        'Youtube had an issue extracting video info; '
-                        'retrying in 3 seconds...'
-                    )
-                    await asyncio.sleep(3)
-                else:
-                    LOGGER.warn('Ran out of retries; giving up')
-                    raise BananaCrime(
-                        'After multiple attempts, I was unable to find a video '
-                        'using what you gave me, so either you gave me a wonky '
-                        'search term, the video I found required payment, or '
-                        'YoutubeDL is temporarily unhappy'
-                    )
-            else:
-                break
+                LOGGER.warn(
+                    'Youtube had an issue extracting video info; '
+                    'retrying in 3 seconds...'
+                )
+                await asyncio.sleep(3)
+        else:
+            LOGGER.warn('Ran out of retries; giving up')
+            raise BananaCrime(
+                'After multiple attempts, I was unable to find a video '
+                'using what you gave me, so either you gave me a wonky '
+                'search term, the video I found required payment, or '
+                'YoutubeDL is temporarily unhappy'
+            )
         # If it found multiple possibilities, just grab the 1st one
         if 'entries' in info:
             info = info['entries'][0]
@@ -263,7 +262,6 @@ class VoiceController(commands.Cog, name='Voice'):
             # Double check there's still an active voice connection that isn't
             #   playing something currently
             if vclient and vclient.is_connected() and not vclient.is_playing():
-                # NOTE: If YTDL ever comes back, may tweak this
                 await vclient.disconnect()
                 await record.send('Disconnected from voice due to inactivity.')
                 LOGGER.info(f'VC timed out in {guild}#{guild.id}')
@@ -533,7 +531,7 @@ class VoiceController(commands.Cog, name='Voice'):
 
         if not desire:
             raise BananaCrime('Give me a search term')
-        gvr = self.guild_voice_records[ctx.guild.id]
+        gvr = self.bot.guild_records[ctx.guild.id]
         if gvr.searching_ytdl:
             raise BananaCrime("I'm already trying to find a video")
 
@@ -658,5 +656,5 @@ class VoiceController(commands.Cog, name='Voice'):
     @commands.command(pass_context=True)
     async def refresh(self, ctx):
         """Refresh my connection to prevent me from timing out."""
-        # This is basically just a nop since the on_command performs updates
+        # This is basically just a nop since on_command performs updates
         await ctx.message.add_reaction('\N{OK HAND SIGN}')

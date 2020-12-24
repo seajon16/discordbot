@@ -21,6 +21,7 @@ class GuildRecord:
         self.last_channel = None
         self.last_dt = None
         self.lock = asyncio.Lock()
+        self.searching_ytdl = False
 
     @property
     def is_active(self):

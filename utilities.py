@@ -49,10 +49,10 @@ async def roll(ctx, desire=None):
     for c in reversed(modifiers):
         if c.isdigit():
             curr_num = c + curr_num
-        elif c == '+':
+        elif c == '+' and curr_num:
             curr_sum += int(curr_num)
             curr_num = ''
-        elif c == '-':
+        elif c == '-' and curr_num:
             curr_sum -= int(curr_num)
             curr_num = ''
         else:

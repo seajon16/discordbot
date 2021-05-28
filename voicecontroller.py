@@ -54,6 +54,21 @@ YTDL_RETRIES = 3
 LOGGER = logging.getLogger(__name__)
 
 
+async def schedule_sb_queue(ctx, queue):
+    while queue:
+        vclient = ctx.voice_client
+        if not vclient or not vclient.is_connected():
+            break
+        if vclient.is_playing():
+            # TODO var this
+            await asyncio.sleep(0.1)
+            continue
+        path = queue.pop(0)
+        vclient.play(
+            discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(path), 0.5)
+        )
+
+
 def ffmpeg_error_catcher(loop, channel, err):
     """Passed into `VoiceContoller.play` to handle and report FFmpeg errors.
 
@@ -403,85 +418,125 @@ class VoiceController(commands.Cog, name='Voice'):
         )
 
     @commands.command(pass_context=True)
-    async def sb(self, ctx, desire: str=None):
-        """Play a given sound from the soundboard.
+    async def sb(self, ctx, *desires):
+        """Play one or more given sounds from the soundboard.
 
         Call this command with no argument to see available sounds.
         """
-        if not desire:
+        if not desires:
             await ctx.send(
                 'Available categories: '
                 f'{", ".join(self.category_to_sounds)}, new, all'
             )
+            return
 
-        elif desire == 'all':
-            # Use split send since this guy can easily grow above 2k chars
-            await split_send(
-                ctx,
-                'All available sounds:\n'
-                + '\n'.join([
-                    '\n'.join(sounds)
-                    for sounds in self.category_to_sounds.values()
-                ])
+        tgt_paths = []
+        to_send = []
+        for desire in desires:
+            if desire == 'all':
+                # Use split send since this guy can easily grow above 2k chars
+                await split_send(
+                    ctx,
+                    'All available sounds:\n'
+                    + '\n'.join([
+                        '\n'.join(sounds)
+                        for sounds in self.category_to_sounds.values()
+                    ])
+                )
+                return
+
+            elif desire == 'new':
+                await ctx.send(
+                    'Most recently added sounds:\n'
+                    + '\n'.join(self.newest_sounds)
+                )
+                return
+
+            # If they searched a category
+            elif desire in self.category_to_sounds:
+                await ctx.send(
+                    f'Category {desire}: '
+                    f'{", ".join(self.category_to_sounds[desire])}'
+                )
+                return
+
+            elif desire == 'random':
+                category, sounds = random.choice(
+                    list(self.category_to_sounds.items())
+                )
+                sound = random.choice(sounds)
+                to_send.append(f"You just heard `{sound}`.")
+
+            # If the sound exists
+            elif desire in self.sound_to_category:
+                sound = desire
+                category = self.sound_to_category[sound]
+
+            # See if we can guess what they meant
+            else:
+                # Always go with edit distance before substring matching
+                sound = min(
+                    self.sound_to_category,
+                    key=partial(editdistance.eval, desire)
+                )
+                # Ensure it is within the minimum edit distance
+                # If no luck with edit distance, go with substring matching
+                if editdistance.eval(desire, sound) > MIN_EDIT_DIST:
+                    substring_matches = [
+                        sound for sound in self.sound_to_category
+                        if desire in sound or sound in desire
+                    ]
+                    if substring_matches:
+                        sound = min(
+                            substring_matches,
+                            key=lambda p, l=len(desire): abs(len(p) - l)
+                        )
+                    # If I still didn't find anything, give up
+                    else:
+                        continue
+                # Otherwise, go for it
+                category = self.sound_to_category.get(sound)
+                to_send.append(
+                    f"`{desire}` isn't a valid sound, "
+                    f"so I'll play `{sound}` instead."
+                )
+
+            tgt_paths.append(f'{SOUND_DIR}/{category}/{sound}.mp3')
+
+        if not tgt_paths:
+            raise BananaCrime(
+                'Invalid category/sound name(s); '
+                f'try `{self.bot.command_prefix}sb` with no arguments'
             )
 
-        elif desire == 'new':
-            await ctx.send(
-                'Most recently added sounds:\n' + '\n'.join(self.newest_sounds)
+        record = self.bot.guild_records[ctx.guild.id]
+
+        # TODO run this in other places too, like maybe explicitly on shutdown
+        #   or, if you were a cool kid, on leave, stop, blah blah blah
+        #   ok especially because calling leave raises an exception in the thread lol
+        #   BUT HEY, it *seemingly* doesn't break anything
+        #   and stop skips the sound (lol)
+        await record.reap_sb_task()
+
+        if record.lock.locked():
+            raise BananaCrime("I'm already trying to process a VC command")
+        async with record.lock:
+            vclient = await self.prepare_to_play(ctx, False)
+
+        if len(tgt_paths) == 1:
+            vclient.play(
+                discord.PCMVolumeTransformer(
+                    discord.FFmpegPCMAudio(tgt_paths[0]),
+                    0.5
+                )
             )
-
-        # If they searched a category
-        elif desire in self.category_to_sounds:
-            await ctx.send(
-                f'Category {desire}: '
-                f'{", ".join(self.category_to_sounds[desire])}'
-            )
-
-        elif desire == 'random':
-            category, sounds = random.choice(
-                list(self.category_to_sounds.items())
-            )
-            sound = random.choice(sounds)
-            await self.play_sound(ctx, category, sound)
-            await ctx.send(f"You just heard `{sound}`.")
-
-        # If the sound exists
-        elif desire in self.sound_to_category:
-            category = self.sound_to_category[desire]
-            await self.play_sound(ctx, category, desire)
-
-        # See if we can guess what they meant
         else:
-            # Always go with edit distance before substring matching
-            sound = min(
-                self.sound_to_category,
-                key=partial(editdistance.eval, desire)
+            record.sb_task = asyncio.create_task(
+                schedule_sb_queue(ctx, tgt_paths)
             )
-            # Ensure it is within the minimum edit distance
-            # If no luck with edit distance, go with substring matching
-            if editdistance.eval(desire, sound) > MIN_EDIT_DIST:
-                substring_matches = [
-                    sound for sound in self.sound_to_category
-                    if desire in sound or sound in desire
-                ]
-                if substring_matches:
-                    sound = min(
-                        substring_matches,
-                        key=lambda p, l=len(desire): abs(len(p) - l)
-                    )
-                # If I still didn't find anything, give up
-                else:
-                    raise BananaCrime(
-                        'Invalid category/sound name; '
-                        f'try `{self.bot.command_prefix}sb` with no arguments'
-                    )
-            # Otherwise, go for it
-            category = self.sound_to_category.get(sound)
-            await self.play_sound(ctx, category, sound)
-            await ctx.send(
-                f"`{desire}` isn't a valid sound, "
-                f"so I'll play `{sound}` instead."
-            )
+
+        if to_send:
+            await ctx.send('\n'.join(to_send))
 
     @commands.command(pass_context=True)
     async def say(self, ctx, *, desire=None):

@@ -22,6 +22,7 @@ class GuildRecord:
         self.last_dt = None
         self.lock = asyncio.Lock()
         self.searching_ytdl = False
+        self.sb_task = None
 
     @property
     def is_active(self):
@@ -51,6 +52,22 @@ class GuildRecord:
         """Send a message to my last channel if I have one, else do nothing."""
         if self.last_channel:
             await self.last_channel.send(msg)
+
+    async def reap_sb_task(self):
+        if not self.sb_task or self.sb_task.cancelled():
+            return
+
+        self.sb_task.cancel()
+        try:
+            await self.sb_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            LOGGER.exception(
+                'Attempting to play a queue of sounds in '
+                f'{ctx.guild}#{ctx.guild.id} failed:'
+            )
+        self.sb_task = None
 
 
 class GuildDB:

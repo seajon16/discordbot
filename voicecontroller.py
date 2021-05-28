@@ -264,7 +264,7 @@ class VoiceController(commands.Cog, name='Voice'):
         for result in results:
             if isinstance(result, Exception):
                 LOGGER.error(
-                    'Unable to close a voice client: '\
+                    'Unable to close a voice client: '
                     f'{type(result).__name__}, {result.args!r}'
                 )
 
@@ -278,8 +278,18 @@ class VoiceController(commands.Cog, name='Voice'):
             #   playing something currently
             if vclient and vclient.is_connected() and not vclient.is_playing():
                 await vclient.disconnect()
-                await record.send('Disconnected from voice due to inactivity.')
-                LOGGER.info(f'VC timed out in {guild}#{guild.id}')
+                try:
+                    await record.send(
+                        'Disconnected from voice due to inactivity.'
+                    )
+                except:
+                    LOGGER.warning(
+                        'Could not send disconnect message to '
+                            f'{guild}#{guild.id}:',
+                        exc_info=True
+                    )
+                else:
+                    LOGGER.info(f'VC timed out in {guild}#{guild.id}')
 
         # Disconnects might silently fail when someone runs a leave
         #   right after the bot creates a new voice client, so

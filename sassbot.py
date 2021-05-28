@@ -249,7 +249,8 @@ class SassBot(commands.Bot):
         elif ex_type == commands.errors.MissingRequiredArgument:
             await ctx.send(
                 'You did not specify the correct number of arguments. '
-                f'Try using `{self.command_prefix}help {{name of command}}`.'
+                f'Try running `{self.command_prefix}help {ctx.command.name}`, '
+                f'you {choice(self.BANANA_NAMES)}.'
             )
 
         elif ex_type == commands.errors.CommandInvokeError \
@@ -273,7 +274,11 @@ class SassBot(commands.Bot):
             await ctx.send("You aren't my owner, you banana.")
 
         elif ex_type == commands.errors.BadArgument:
-            await ctx.send(ex.args[0])
+            await ctx.send(
+                f'{ex.args[0]} '
+                f'Try running `{self.command_prefix}help {ctx.command.name}`, '
+                f'you {choice(self.BANANA_NAMES)}.'
+            )
 
         elif ex_type == commands.errors.UnexpectedQuoteError:
             await ctx.send(
@@ -294,14 +299,19 @@ class SassBot(commands.Bot):
                 f"you {choice(self.BANANA_NAMES)}."
             )
 
+        elif ex_type == commands.errors.ChannelNotFound:
+            await ctx.send(
+                "That channel doesn't exist; make sure to match casing "
+                "and encase the channel name in quotes if it has spaces in it, "
+                f"you {choice(self.BANANA_NAMES)}."
+            )
+
         else:
             await ctx.send('what are you doing')
             LOGGER.error(
-                'Unexpected exception thrown '
-                f'({type(ex).__name__}, {ex.args!r}) '
-                'while handling a command:'
+                'Unexpected exception thrown while handling a command:',
+                exc_info=ex
             )
-            raise ex
 
     async def on_command_completion(self, ctx):
         """Update my list of error counts and praise people if need be."""

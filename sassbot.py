@@ -11,6 +11,7 @@ from exceptions import BananaCrime
 from voicecontroller import VoiceController
 from guilddb import GuildDB
 
+
 # Defaults
 DEFAULT_ACTIVE_TIMEOUT_CHECK_INTERVAL_S = 60
 DEFAULT_ACTIVE_TIMEOUT_M = 30
@@ -190,6 +191,28 @@ class SassBot(commands.Bot):
                     f'{type(result).__name__}, {result.args!r}'
                 )
 
+    async def handle_crit(self, msg):
+        """DMs my owner saying I just fired a crit."""
+        if self.owner_id:
+            owner = self.get_user(self.owner_id) \
+                or await self.fetch_user(self.owner_id)
+        else:
+            owner = (await self.application_info()).owner
+        if not owner:
+            LOGGER.error(f'Could not find owner with ID {self.owner_id}')
+            return
+
+        tgt_channel = owner.dm_channel or await owner.create_dm()
+        if not tgt_channel:
+            LOGGER.error(
+                f'Could not create DM channel with owner ID {self.owner_id}'
+            )
+            return
+        await tgt_channel.send(
+            'Hello, you garbage programmer. '
+            f'I just fired a crit with this message:\n{msg}'
+        )
+
     @property
     def guild_records(self):
         """All guild records."""
@@ -216,6 +239,7 @@ class SassBot(commands.Bot):
             #   discord.py's main handler would report it again unless we made a
             #   custom canceller/reaper
             LOGGER.critical('Inactivity checking task failed:', exc_info=True)
+            await self.handle_crit('Inactivity checking task failed')
 
     # Event overriders #
     async def check_err_count(self, ctx):

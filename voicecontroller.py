@@ -170,7 +170,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             raise BananaCrime(
                 'After multiple attempts, I was unable to find a video '
                 'using what you gave me, so either you gave me a wonky '
-                'search term, the video I found required payment, or '
+                'search term, the video I found required a login, or '
                 'YoutubeDL is temporarily unhappy'
             )
         # If it found multiple possibilities, just grab the 1st one

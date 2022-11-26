@@ -14,6 +14,7 @@ from youtube_dl.utils import DownloadError, UnsupportedError
 from functools import partial
 import logging
 import editdistance
+from copy import deepcopy
 
 from exceptions import BananaCrime
 
@@ -32,7 +33,7 @@ GTTS_TEMP_FILE = f'{SOUND_DIR}/temp_voice.mp3'
 # Minimum edit distance for a requested `sb` sound request
 MIN_EDIT_DIST = 4
 
-FFMPEG_OPTS = {
+FFMPEG_DEFAULT_OPTS = {
     'before_options': \
         '-reconnect 1 ' \
         '-reconnect_streamed 1 ' \
@@ -111,6 +112,12 @@ async def split_send(ctx, msg):
     await ctx.send(msg[start_p:])
 
 
+def istimestamp(s: str) -> bool:
+    """Return if given string is a timestamp in format mm:ss or hh:mm:ss."""
+    piecewise = s.split(':')
+    return 1 < len(piecewise) < 4 and all(t.isnumeric() for t in piecewise)
+
+
 class YTDLSource(discord.PCMVolumeTransformer):
     """Wrapper for YoutubeDL streaming functionality.
 
@@ -139,7 +146,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         )
 
     @classmethod
-    async def create_from_search(cls, search, loop=None):
+    async def create_from_search(cls, search, timestamp=None, loop=None):
         """Create a YTDLSource object using a search term.
 
         Args:
@@ -177,7 +184,14 @@ class YTDLSource(discord.PCMVolumeTransformer):
         if 'entries' in info:
             info = info['entries'][0]
 
-        return cls(discord.FFmpegPCMAudio(info['url'], **FFMPEG_OPTS), info)
+        # Apply timestamp
+        if timestamp:
+            ffmpeg_opts = deepcopy(FFMPEG_DEFAULT_OPTS)
+            ffmpeg_opts['before_options'] += f' -ss {timestamp}'
+        else:
+            ffmpeg_opts = FFMPEG_DEFAULT_OPTS
+
+        return cls(discord.FFmpegPCMAudio(info['url'], **ffmpeg_opts), info)
 
 
 class VoiceController(commands.Cog, name='Voice'):
@@ -592,6 +606,15 @@ class VoiceController(commands.Cog, name='Voice'):
         Keyword/phrase searches are performed across YouTube.
         However, URLs can come from any of these sites:
         https://rg3.github.io/youtube-dl/supportedsites.html
+        You can also specify a timestamp in the format hh:mm:ss or mm:ss at the
+            end of your search term or URL, and the bot will start playback at
+            that timestamp.
+
+        Examples:
+        * `play https://youtu.be/wBBqMgwdFPM` will play the given video
+        * `play hardline officer of the law` will play the same video
+        * `play hardline officer of the law 5:45` will play the same video,
+            but start at 5:45
         """
 
         if not desire:
@@ -600,11 +623,17 @@ class VoiceController(commands.Cog, name='Voice'):
         if gvr.searching_ytdl:
             raise BananaCrime("I'm already trying to find a video")
 
+        # Determine if the final word is a timestamp
+        term, _, timestamp = desire.rpartition(' ')
+        if not istimestamp(timestamp):
+            term = desire
+            timestamp = None
+
         async with ctx.typing():
             gvr.searching_ytdl = True
             try:
                 ytdl_src = await YTDLSource.create_from_search(
-                    desire, self.bot.loop
+                    term, timestamp, self.bot.loop
                 )
                 async with gvr.lock:
                     vclient = await self.prepare_to_play(ctx)

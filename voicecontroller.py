@@ -632,7 +632,7 @@ class VoiceController(commands.Cog, name='Voice'):
         # If the first word in the search term contains a colon, ffmpeg will
         #   interpret it as a URL type and usually reject it, so escape them
         first, _, rest = term.partition(' ')
-        term = f'{first.replace(":", "\\:")} {rest}'.strip()
+        term = first.replace(":", "\\:") + f' {rest}' if rest else ''
 
         async with ctx.typing():
             gvr.searching_ytdl = True

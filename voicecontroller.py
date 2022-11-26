@@ -126,10 +126,11 @@ class YTDLSource(discord.PCMVolumeTransformer):
         https://github.com/Rapptz/discord.py/blob/master/examples/basic_voice.py
     """
 
-    def __init__(self, source, info, volume=0.5):
+    def __init__(self, source, info, timestamp=None, volume=0.5):
         super().__init__(source, volume)
         self.title = info['title']
         self.uploader = info.get('uploader')
+        self.timestamp = timestamp
         if 'duration' in info:
             self.duration_m, self.duration_s = divmod(int(info['duration']), 60)
         else:
@@ -140,6 +141,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         return (
             f"{self.title}\n"
             f"uploaded by {self.uploader or 'the void'}\n"
+            + (f"starting at {self.timestamp}\n" if self.timestamp else "")
             + (f"[{self.duration_m}m {self.duration_s}s]"
                 if self.duration_m or self.duration_s
                 else "[what on earth is this]")
@@ -191,7 +193,11 @@ class YTDLSource(discord.PCMVolumeTransformer):
         else:
             ffmpeg_opts = FFMPEG_DEFAULT_OPTS
 
-        return cls(discord.FFmpegPCMAudio(info['url'], **ffmpeg_opts), info)
+        return cls(
+            discord.FFmpegPCMAudio(info['url'], **ffmpeg_opts),
+            info,
+            timestamp
+        )
 
 
 class VoiceController(commands.Cog, name='Voice'):

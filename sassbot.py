@@ -1,5 +1,5 @@
 import asyncio
-from discord import Game
+from discord import Game, Intents
 from discord.ext import commands
 from discord.errors import HTTPException
 from random import choice
@@ -59,6 +59,8 @@ class SassBot(commands.Bot):
     def __init__(self, **kwargs):
         # Grab & remove settings base class doesn't need
         self.parse_kwargs(kwargs)
+        kwargs['intents'] = Intents.default()
+        kwargs['intents'].message_content = True
 
         # Used for error customization
         self.err_count = {}
@@ -67,9 +69,7 @@ class SassBot(commands.Bot):
 
         super().__init__(**kwargs)
 
-        self.load_extension('utilities')
         self.voice_controller = VoiceController(self, **self.voice_settings)
-        self.add_cog(self.voice_controller)
 
     def parse_kwargs(self, kwargs):
         """Helper to parse kwargs and set defaults."""
@@ -95,7 +95,7 @@ class SassBot(commands.Bot):
         LOGGER.info('Caught SIGINT')
         self.loop.create_task(self.close())
 
-    def run(self):
+    async def run(self):
         """Start bot, keeping control within this object.
 
         Control will cease on SIGINT or an unrecoverable exception.
@@ -105,9 +105,11 @@ class SassBot(commands.Bot):
         )
         try:
             LOGGER.info('Starting bot...')
-            self.loop.run_until_complete(self._prepare_to_serve())
+            await self.load_extension('utilities')
+            await self.add_cog(self.voice_controller)
+            await self._prepare_to_serve()
 
-            self.loop.run_until_complete(self.connect())
+            await self.connect()
         except Exception:
             # NOTE: This exception isn't re-raised since it's logged
             #   and will trigger the bot's shutdown procedure
@@ -116,10 +118,9 @@ class SassBot(commands.Bot):
                 'stopping bot...',
                 exc_info=True
             )
-            self.loop.run_until_complete(self.close())
+            await self.close()
         finally:
             LOGGER.info('Bot stopped')
-            self.loop.close()
 
     async def _prepare_to_serve(self):
         """Connect to Discord and initialize objects that need the data.
@@ -171,7 +172,6 @@ class SassBot(commands.Bot):
         await self.loop.shutdown_asyncgens()
         LOGGER.debug('Async generators shut down')
 
-        self.loop.stop()
 
     # Guild-record-related #
     async def tell_active_guilds(self, msg):

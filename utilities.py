@@ -104,7 +104,7 @@ async def code(ctx):
     await ctx.send(GITHUB_URL)
 
 
-def setup(bot):
+async def setup(bot):
     callbacks = [
         howyoudoin,
         roll,

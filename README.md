@@ -31,7 +31,7 @@ Inactivity timeouts for hanging voice sessions.
 
 
 # Requirements
-* Python 3.7+
+* Python 3.10+
 * The following packages:
   * `pip`-able:
     * `discord.py[voice]`

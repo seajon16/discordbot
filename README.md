@@ -36,7 +36,7 @@ Inactivity timeouts for hanging voice sessions.
   * `pip`-able:
     * `discord.py[voice]`
     * `gTTS`
-    * `youtube-dl`
+    * `yt-dlp`
     * `editdistance`
   * Not `pip`-able:
     * `ffmpeg`

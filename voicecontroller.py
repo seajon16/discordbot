@@ -8,8 +8,8 @@ from gtts import gTTS
 # _extra_langs is needed for now since there's a bug in gTTS
 from gtts.lang import tts_langs, _extra_langs
 from datetime import datetime
-from youtube_dl import YoutubeDL
-from youtube_dl.utils import DownloadError, UnsupportedError
+from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError, UnsupportedError
 from functools import partial
 import logging
 import editdistance
